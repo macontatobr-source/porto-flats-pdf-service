@@ -47,13 +47,13 @@ def draw_presupuesto(filename, data):
     c.setFont("Lato-Semibold", 17)
     c.drawString(MARGIN + logo_w + 4*mm, PAGE_H - MARGIN - 11*mm, "F L A T S")
 
-    # Presupuesto NÂ° + fecha (derecha)
+    # Presupuesto N° + fecha (derecha)
     c.setFont("Lato-Regular", 9)
     c.setFillColor(colors.HexColor("#8A8A8A"))
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 2*mm, "PRESUPUESTO")
     c.setFont("Lato-Bold", 12)
     c.setFillColor(TEXT_DARK)
-    c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 7*mm, f"NÂ° {data['numero']}")
+    c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 7*mm, f"N° {data['numero']}")
     c.setFont("Lato-Regular", 9)
     c.setFillColor(colors.HexColor("#8A8A8A"))
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 12*mm, f"Fecha: {data['fecha']}")
@@ -221,7 +221,7 @@ def draw_presupuesto(filename, data):
 
 
 def _fmt_brl(v):
-    """Formatea nÃºmero como R$ X.XXX"""
+    """Formatea número como R$ X.XXX"""
     try:
         return f"R$ {int(round(float(v))):,}".replace(",", ".")
     except Exception:
@@ -248,7 +248,7 @@ def _draw_strike(c, x, y, text, font, size, color, right=False):
 
 def draw_presupuesto_v2(filename, data):
     """
-    Presupuesto Porto Flats â formato v2.
+    Presupuesto Porto Flats — formato v2.
     data keys:
       numero, fecha, cliente, propiedad,
       distancia (opt), personas, checkin, hora_checkin, checkout, hora_checkout,
@@ -257,7 +257,7 @@ def draw_presupuesto_v2(filename, data):
       cochera (str, opt), traslado (str, opt),
       forma_pago, anticipo_pct (int, default 50),
       observaciones (str, opt), url_link (str, opt)
-    Calcula automÃ¡ticamente:
+    Calcula automáticamente:
       diaria_descuento = (total_brl - limpieza_brl) / noches
       diaria_regular   = diaria_descuento * 1.10  (tachada)
     """
@@ -272,7 +272,7 @@ def draw_presupuesto_v2(filename, data):
 
     c = canvas.Canvas(filename, pagesize=A4)
 
-    # ââ HEADER ââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── HEADER ────────────────────────────────────────────────
     logo_path = "logo_seahorse_sage.png"
     logo_w = 9 * mm
     logo_h = logo_w * (305 / 151)
@@ -290,7 +290,7 @@ def draw_presupuesto_v2(filename, data):
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 2*mm, "PRESUPUESTO")
     c.setFont("Lato-Bold", 12)
     c.setFillColor(TEXT_DARK)
-    c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 7*mm, f"NÂ° {data['numero']}")
+    c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 7*mm, f"N° {data['numero']}")
     c.setFont("Lato-Regular", 8.5)
     c.setFillColor(colors.HexColor("#8A8A8A"))
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 12*mm, f"Fecha: {data['fecha']}")
@@ -300,7 +300,7 @@ def draw_presupuesto_v2(filename, data):
     c.setLineWidth(0.6)
     c.line(MARGIN, y, PAGE_W - MARGIN, y)
 
-    # ââ PREPARADO PARA ââââââââââââââââââââââââââââââââââââââââ
+    # ── PREPARADO PARA ────────────────────────────────────────
     y -= 8*mm
     c.setFont("Lato-Regular", 8)
     c.setFillColor(colors.HexColor("#8A8A8A"))
@@ -310,7 +310,7 @@ def draw_presupuesto_v2(filename, data):
     c.setFillColor(TEXT_DARK)
     c.drawString(MARGIN, y, data["cliente"].upper())
 
-    # ââ TARJETA PROPIEDAD âââââââââââââââââââââââââââââââââââââ
+    # ── TARJETA PROPIEDAD ─────────────────────────────────────
     y -= 10*mm
     feats = data.get("caracteristicas", [])
     n_rows = max(1, (len(feats) + 1) // 2)
@@ -328,7 +328,7 @@ def draw_presupuesto_v2(filename, data):
     c.setFont("Lato-Regular", 8.5)
     c.setFillColor(SAGE)
     dist = data.get("distancia", "Porto de Galinhas, PE, Brasil")
-    c.drawString(ix, ty, dist + "  Â·  Porto de Galinhas, PE, Brasil")
+    c.drawString(ix, ty, dist + "  ·  Porto de Galinhas, PE, Brasil")
 
     ty -= 6*mm
     col2_x = ix + (PAGE_W - 2*MARGIN - 12*mm) / 2
@@ -343,7 +343,7 @@ def draw_presupuesto_v2(filename, data):
 
     y -= card_h + 8*mm
 
-    # ââ FECHAS / RESERVA ââââââââââââââââââââââââââââââââââââââ
+    # ── FECHAS / RESERVA ──────────────────────────────────────
     c.setFont("Lato-Semibold", 9)
     c.setFillColor(SAGE)
     c.drawString(MARGIN, y, "DETALLE DE LA RESERVA")
@@ -355,7 +355,7 @@ def draw_presupuesto_v2(filename, data):
 
     cols = [
         ("CHECK-IN",  data.get("checkin", ""), data.get("hora_checkin", "14:00 hs")),
-        ("CHECK-OUT", data.get"checkout", ""), data.get("hora_checkout", "12:00 hs")),
+        ("CHECK-OUT", data.get("checkout", ""), data.get("hora_checkout", "12:00 hs")),
         ("NOCHES",    str(noches), ""),
         ("PERSONAS",  str(data.get("personas", "")), ""),
     ]
@@ -375,7 +375,7 @@ def draw_presupuesto_v2(filename, data):
 
     y -= 17*mm
 
-    # ââ PRECIOS âââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── PRECIOS ───────────────────────────────────────────────
     c.setFont("Lato-Semibold", 9)
     c.setFillColor(SAGE)
     c.drawString(MARGIN, y, "DETALLE DE PRECIOS")
@@ -387,14 +387,14 @@ def draw_presupuesto_v2(filename, data):
     GRAY = colors.HexColor("#A0A0A0")
     RIGHT = PAGE_W - MARGIN
 
-    # Diaria regular â tachada en gris
+    # Diaria regular — tachada en gris
     c.setFont("Lato-Regular", 9.5)
     c.setFillColor(GRAY)
     c.drawString(MARGIN, y, "Diaria regular:")
     _draw_strike(c, RIGHT, y, _fmt_brl(diaria_reg), "Lato-Regular", 9.5, GRAY, right=True)
     y -= 6.5*mm
 
-    # Diaria c/descuento â normal
+    # Diaria c/descuento — normal
     c.setFont("Lato-Regular", 9.5)
     c.setFillColor(TEXT_DARK)
     c.drawString(MARGIN, y, "Diaria c/descuento:")
@@ -419,7 +419,7 @@ def draw_presupuesto_v2(filename, data):
         c.drawRightString(RIGHT, y, traslado)
         y -= 6.5*mm
 
-    # LÃ­nea + TOTAL
+    # Línea + TOTAL
     y -= 2*mm
     c.setStrokeColor(STONE)
     c.line(MARGIN, y, RIGHT, y)
@@ -435,7 +435,7 @@ def draw_presupuesto_v2(filename, data):
     c.setFont("Lato-Bold", 16)
     c.drawRightString(RIGHT - 6*mm, y - 5*mm, _fmt_brl(total_brl))
 
-    # ââ CONDICIONES âââââââââââââââââââââââââââââââââââââââââââ
+    # ── CONDICIONES ───────────────────────────────────────────
     y -= total_box_h + 6*mm
     c.setFont("Lato-Regular", 9)
     c.setFillColor(TEXT_DARK)
@@ -478,7 +478,7 @@ def draw_presupuesto_v2(filename, data):
         c.drawString(MARGIN, y, url_link)
         c.linkURL(url_link, (MARGIN, y - 1*mm, MARGIN + 120*mm, y + 4*mm), relative=0)
 
-    # ââ FOOTER ââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── FOOTER ────────────────────────────────────────────────
     foot_y = 14*mm
     c.setStrokeColor(STONE)
     c.setLineWidth(0.6)
@@ -503,7 +503,7 @@ if __name__ == "__main__":
         "ubicacion_desc": "A 40 m de la playa - Porto de Galinhas, PE, Brasil",
         "caracteristicas": [
             "Estudio - 1 dormitorio",
-            "1 baÃ±o",
+            "1 baño",
             "Cocina con heladera y microondas",
             "Aire acondicionado",
             "Ropa de cama y toallas incluidas",
