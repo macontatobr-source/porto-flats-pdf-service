@@ -47,13 +47,13 @@ def draw_presupuesto(filename, data):
     c.setFont("Lato-Semibold", 17)
     c.drawString(MARGIN + logo_w + 4*mm, PAGE_H - MARGIN - 11*mm, "F L A T S")
 
-    # Presupuesto N° + fecha (derecha)
+    # Presupuesto NÂ° + fecha (derecha)
     c.setFont("Lato-Regular", 9)
     c.setFillColor(colors.HexColor("#8A8A8A"))
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 2*mm, "PRESUPUESTO")
     c.setFont("Lato-Bold", 12)
     c.setFillColor(TEXT_DARK)
-    c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 7*mm, f"N° {data['numero']}")
+    c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 7*mm, f"NÂ° {data['numero']}")
     c.setFont("Lato-Regular", 9)
     c.setFillColor(colors.HexColor("#8A8A8A"))
     c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 12*mm, f"Fecha: {data['fecha']}")
@@ -220,6 +220,280 @@ def draw_presupuesto(filename, data):
     c.save()
 
 
+def _fmt_brl(v):
+    """Formatea nÃºmero como R$ X.XXX"""
+    try:
+        return f"R$ {int(round(float(v))):,}".replace(",", ".")
+    except Exception:
+        return f"R$ {v}"
+
+
+def _draw_strike(c, x, y, text, font, size, color, right=False):
+    """Dibuja texto con tachado (strikethrough)."""
+    c.setFont(font, size)
+    c.setFillColor(color)
+    if right:
+        c.drawRightString(x, y, text)
+        w = c.stringWidth(text, font, size)
+        x0 = x - w
+    else:
+        c.drawString(x, y, text)
+        x0 = x
+        w = c.stringWidth(text, font, size)
+    mid_y = y + size * 0.30
+    c.setStrokeColor(color)
+    c.setLineWidth(0.7)
+    c.line(x0, mid_y, x0 + w, mid_y)
+
+
+def draw_presupuesto_v2(filename, data):
+    """
+    Presupuesto Porto Flats â formato v2.
+    data keys:
+      numero, fecha, cliente, propiedad,
+      distancia (opt), personas, checkin, hora_checkin, checkout, hora_checkout,
+      noches, caracteristicas (list[str]),
+      total_brl (number), limpieza_brl (number),
+      cochera (str, opt), traslado (str, opt),
+      forma_pago, anticipo_pct (int, default 50),
+      observaciones (str, opt), url_link (str, opt)
+    Calcula automÃ¡ticamente:
+      diaria_descuento = (total_brl - limpieza_brl) / noches
+      diaria_regular   = diaria_descuento * 1.10  (tachada)
+    """
+    noches = max(int(data.get("noches", 1) or 1), 1)
+    total_brl    = float(data.get("total_brl", 0) or 0)
+    limpieza_brl = float(data.get("limpieza_brl", 0) or 0)
+    diaria_desc  = (total_brl - limpieza_brl) / noches
+    diaria_reg   = diaria_desc * 1.10
+    anticipo_pct = int(data.get("anticipo_pct", 50) or 50)
+
+    STONE_LIGHT = colors.HexColor("#E8E4E0")
+
+    c = canvas.Canvas(filename, pagesize=A4)
+
+    # ââ HEADER ââââââââââââââââââââââââââââââââââââââââââââââââ
+    logo_path = "logo_seahorse_sage.png"
+    logo_w = 9 * mm
+    logo_h = logo_w * (305 / 151)
+    c.drawImage(logo_path, MARGIN, PAGE_H - MARGIN - logo_h + 2*mm,
+                width=logo_w, height=logo_h, mask="auto")
+
+    c.setFont("Lato-Light", 17)
+    c.setFillColor(TEXT_DARK)
+    c.drawString(MARGIN + logo_w + 4*mm, PAGE_H - MARGIN - 5*mm, "P O R T O")
+    c.setFont("Lato-Semibold", 17)
+    c.drawString(MARGIN + logo_w + 4*mm, PAGE_H - MARGIN - 11*mm, "F L A T S")
+
+    c.setFont("Lato-Regular", 8.5)
+    c.setFillColor(colors.HexColor("#8A8A8A"))
+    c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 2*mm, "PRESUPUESTO")
+    c.setFont("Lato-Bold", 12)
+    c.setFillColor(TEXT_DARK)
+    c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 7*mm, f"NÂ° {data['numero']}")
+    c.setFont("Lato-Regular", 8.5)
+    c.setFillColor(colors.HexColor("#8A8A8A"))
+    c.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN - 12*mm, f"Fecha: {data['fecha']}")
+
+    y = PAGE_H - MARGIN - 18*mm
+    c.setStrokeColor(STONE)
+    c.setLineWidth(0.6)
+    c.line(MARGIN, y, PAGE_W - MARGIN, y)
+
+    # ââ PREPARADO PARA ââââââââââââââââââââââââââââââââââââââââ
+    y -= 8*mm
+    c.setFont("Lato-Regular", 8)
+    c.setFillColor(colors.HexColor("#8A8A8A"))
+    c.drawString(MARGIN, y, "PREPARADO PARA")
+    y -= 5.5*mm
+    c.setFont("Lato-Bold", 12)
+    c.setFillColor(TEXT_DARK)
+    c.drawString(MARGIN, y, data["cliente"].upper())
+
+    # ââ TARJETA PROPIEDAD âââââââââââââââââââââââââââââââââââââ
+    y -= 10*mm
+    feats = data.get("caracteristicas", [])
+    n_rows = max(1, (len(feats) + 1) // 2)
+    card_h = 17*mm + n_rows * 5*mm
+    c.setFillColor(IVORY)
+    c.roundRect(MARGIN, y - card_h, PAGE_W - 2*MARGIN, card_h, 3*mm, stroke=0, fill=1)
+
+    ix = MARGIN + 6*mm
+    ty = y - 7*mm
+    c.setFont("Lato-Bold", 12)
+    c.setFillColor(TEXT_DARK)
+    c.drawString(ix, ty, data["propiedad"])
+
+    ty -= 5.5*mm
+    c.setFont("Lato-Regular", 8.5)
+    c.setFillColor(SAGE)
+    dist = data.get("distancia", "Porto de Galinhas, PE, Brasil")
+    c.drawString(ix, ty, dist + "  Â·  Porto de Galinhas, PE, Brasil")
+
+    ty -= 6*mm
+    col2_x = ix + (PAGE_W - 2*MARGIN - 12*mm) / 2
+    for i, feat in enumerate(feats):
+        col_x = ix if i % 2 == 0 else col2_x
+        fy = ty - (i // 2) * 5*mm
+        c.setFillColor(SAGE)
+        c.circle(col_x + 1*mm, fy + 1.5*mm, 0.9*mm, stroke=0, fill=1)
+        c.setFont("Lato-Regular", 8.5)
+        c.setFillColor(TEXT_DARK)
+        c.drawString(col_x + 3.5*mm, fy, feat)
+
+    y -= card_h + 8*mm
+
+    # ââ FECHAS / RESERVA ââââââââââââââââââââââââââââââââââââââ
+    c.setFont("Lato-Semibold", 9)
+    c.setFillColor(SAGE)
+    c.drawString(MARGIN, y, "DETALLE DE LA RESERVA")
+    y -= 2*mm
+    c.setStrokeColor(STONE)
+    c.setLineWidth(0.5)
+    c.line(MARGIN, y, PAGE_W - MARGIN, y)
+    y -= 7*mm
+
+    cols = [
+        ("CHECK-IN",  data.get("checkin", ""), data.get("hora_checkin", "14:00 hs")),
+        ("CHECK-OUT", data.get"checkout", ""), data.get("hora_checkout", "12:00 hs")),
+        ("NOCHES",    str(noches), ""),
+        ("PERSONAS",  str(data.get("personas", "")), ""),
+    ]
+    col_w = (PAGE_W - 2*MARGIN) / 4
+    for i, (lbl, v1, v2) in enumerate(cols):
+        cx = MARGIN + i * col_w
+        c.setFont("Lato-Regular", 7.5)
+        c.setFillColor(colors.HexColor("#8A8A8A"))
+        c.drawString(cx, y, lbl)
+        c.setFont("Lato-Bold", 10)
+        c.setFillColor(TEXT_DARK)
+        c.drawString(cx, y - 5*mm, v1)
+        if v2:
+            c.setFont("Lato-Regular", 8)
+            c.setFillColor(colors.HexColor("#8A8A8A"))
+            c.drawString(cx, y - 9.5*mm, v2)
+
+    y -= 17*mm
+
+    # ââ PRECIOS âââââââââââââââââââââââââââââââââââââââââââââââ
+    c.setFont("Lato-Semibold", 9)
+    c.setFillColor(SAGE)
+    c.drawString(MARGIN, y, "DETALLE DE PRECIOS")
+    y -= 2*mm
+    c.setStrokeColor(STONE)
+    c.line(MARGIN, y, PAGE_W - MARGIN, y)
+    y -= 7*mm
+
+    GRAY = colors.HexColor("#A0A0A0")
+    RIGHT = PAGE_W - MARGIN
+
+    # Diaria regular â tachada en gris
+    c.setFont("Lato-Regular", 9.5)
+    c.setFillColor(GRAY)
+    c.drawString(MARGIN, y, "Diaria regular:")
+    _draw_strike(c, RIGHT, y, _fmt_brl(diaria_reg), "Lato-Regular", 9.5, GRAY, right=True)
+    y -= 6.5*mm
+
+    # Diaria c/descuento â normal
+    c.setFont("Lato-Regular", 9.5)
+    c.setFillColor(TEXT_DARK)
+    c.drawString(MARGIN, y, "Diaria c/descuento:")
+    c.drawRightString(RIGHT, y, _fmt_brl(diaria_desc))
+    y -= 6.5*mm
+
+    # Limpieza
+    c.drawString(MARGIN, y, "T.B. Limpieza:")
+    c.drawRightString(RIGHT, y, _fmt_brl(limpieza_brl))
+    y -= 6.5*mm
+
+    # Cochera
+    cochera = data.get("cochera", "No incluye") or "No incluye"
+    c.drawString(MARGIN, y, "Cochera:")
+    c.drawRightString(RIGHT, y, cochera)
+    y -= 6.5*mm
+
+    # Traslado (opcional)
+    traslado = (data.get("traslado", "") or "").strip()
+    if traslado:
+        c.drawString(MARGIN, y, "Traslado:")
+        c.drawRightString(RIGHT, y, traslado)
+        y -= 6.5*mm
+
+    # LÃ­nea + TOTAL
+    y -= 2*mm
+    c.setStrokeColor(STONE)
+    c.line(MARGIN, y, RIGHT, y)
+
+    y -= 11*mm
+    total_box_h = 14*mm
+    c.setFillColor(SAGE)
+    c.roundRect(MARGIN, y - total_box_h + 4*mm, PAGE_W - 2*MARGIN, total_box_h,
+                2.5*mm, stroke=0, fill=1)
+    c.setFont("Lato-Regular", 10)
+    c.setFillColor(WHITE)
+    c.drawString(MARGIN + 6*mm, y - 4*mm, "VALOR TOTAL")
+    c.setFont("Lato-Bold", 16)
+    c.drawRightString(RIGHT - 6*mm, y - 5*mm, _fmt_brl(total_brl))
+
+    # ââ CONDICIONES âââââââââââââââââââââââââââââââââââââââââââ
+    y -= total_box_h + 6*mm
+    c.setFont("Lato-Regular", 9)
+    c.setFillColor(TEXT_DARK)
+
+    forma_pago = data.get("forma_pago", "Transferencia bancaria") or "Transferencia bancaria"
+    c.drawString(MARGIN, y, f"Forma de pago: {forma_pago}")
+    y -= 5.5*mm
+    c.drawString(MARGIN, y, "Consultar para pagos en Pesos Arg.")
+    y -= 5.5*mm
+    c.drawString(MARGIN, y,
+                 f"La reserva se confirma con un anticipo del {anticipo_pct}% del importe total.")
+    y -= 5.5*mm
+
+    # Observaciones
+    obs = (data.get("observaciones", "") or "").strip()
+    if obs:
+        y -= 3*mm
+        c.setFont("Lato-Semibold", 9)
+        c.setFillColor(SAGE)
+        c.drawString(MARGIN, y, "OBSERVACIONES")
+        y -= 5*mm
+        c.setFont("Lato-Regular", 8.5)
+        c.setFillColor(TEXT_DARK)
+        # Wrap long text at 80 chars approx
+        import textwrap
+        for line in textwrap.wrap(obs, width=85):
+            c.drawString(MARGIN, y, line)
+            y -= 4.5*mm
+
+    # URL link
+    url_link = (data.get("url_link", "") or "").strip()
+    if url_link:
+        y -= 4*mm
+        c.setFont("Lato-Semibold", 9)
+        c.setFillColor(SAGE)
+        c.drawString(MARGIN, y, "VER PROPIEDAD:")
+        y -= 5.5*mm
+        c.setFont("Lato-Regular", 8.5)
+        c.setFillColor(DARK_ACCENT)
+        c.drawString(MARGIN, y, url_link)
+        c.linkURL(url_link, (MARGIN, y - 1*mm, MARGIN + 120*mm, y + 4*mm), relative=0)
+
+    # ââ FOOTER ââââââââââââââââââââââââââââââââââââââââââââââââ
+    foot_y = 14*mm
+    c.setStrokeColor(STONE)
+    c.setLineWidth(0.6)
+    c.line(MARGIN, foot_y + 8*mm, PAGE_W - MARGIN, foot_y + 8*mm)
+    c.setFont("Lato-Light", 9)
+    c.setFillColor(SAGE)
+    c.drawCentredString(PAGE_W/2, foot_y + 3*mm, "Tu lugar en Porto de Galinhas.")
+    c.setFont("Lato-Regular", 7)
+    c.setFillColor(colors.HexColor("#A0A0A0"))
+    c.drawCentredString(PAGE_W/2, foot_y - 2*mm,
+                        "M&A Empreendimentos Ltda. / CNPJ: 51.057.038/0001-31")
+
+    c.save()
+
+
 if __name__ == "__main__":
     sample_data = {
         "numero": "002510",
@@ -229,7 +503,7 @@ if __name__ == "__main__":
         "ubicacion_desc": "A 40 m de la playa - Porto de Galinhas, PE, Brasil",
         "caracteristicas": [
             "Estudio - 1 dormitorio",
-            "1 baño",
+            "1 baÃ±o",
             "Cocina con heladera y microondas",
             "Aire acondicionado",
             "Ropa de cama y toallas incluidas",
