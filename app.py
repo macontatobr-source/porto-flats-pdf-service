@@ -125,6 +125,10 @@ def propiedad_page():
           {'<div class="date-noches">' + noches_label + '</div>' if noches_label else ''}
         </div>"""
 
+    _maps_btn = (f"<a href='{m}' class='btn btn-light' target='_blank'>\U0001f4cd "
+                 "Ver en Google Maps</a>" if m else "")
+    _anuncio_btn = (f"<a href='{orig}' class='btn btn-light' target='_blank'>\U0001f517 "
+                    "Ver anuncio completo</a>" if orig else "")
     html = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -188,8 +192,8 @@ h1{{font-size:24px;font-weight:400;line-height:1.3}}
 <div class="card">
   <div class="sec-title">Â¿Te interesa?</div>
   <a href="https://wa.me/{wa_num}?text=Hola!+Me+interesa+{t.replace(' ', '+')}" class="btn btn-green">\U0001f4ac Consultar por WhatsApp</a>
-  {"<a href='" + m + "' class='btn btn-light' target='_blank'>\U0001f4cd Ver en Google Maps</a>" if m else ""}
-  {"<a href='" + orig + "' class='btn btn-light' target='_blank'>\U0001f517 Ver anuncio completo</a>" if orig else ""}
+  {_maps_btn}
+  {_anuncio_btn}
 </div>
 <div class="footer">
   Porto Flats Â· Alquileres temporarios<br>
