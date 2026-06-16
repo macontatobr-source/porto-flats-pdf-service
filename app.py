@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Porto Flats - Servicio PDF
-API Flask para generar presupuestos en PDF desde n8n
+Porto Flats - Servicio PDF + Mini-anuncio
+API Flask para generar presupuestos en PDF y páginas de propiedad desde n8n
 """
 import base64
 import os
 import tempfile
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from build_presupuesto import draw_presupuesto
 
 app = Flask(__name__)
@@ -15,6 +15,157 @@ app = Flask(__name__)
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "service": "porto-flats-pdf"})
+
+
+@app.route("/propiedad", methods=["GET"])
+def propiedad_page():
+    """
+    Mini-anuncio de propiedad para enviar al cliente por WhatsApp.
+    Params:
+      t  = titulo/nombre
+      d  = distancia al mar (ej: "40m del mar")
+      c  = cuartos
+      b  = banos
+      h  = hospedes max
+      a  = amenidades (comma-separated)
+      p  = precio por noche en BRL
+      l  = limpieza en BRL
+      m  = link Google Maps
+      o  = link anuncio original
+      ci = check-in
+      co = check-out
+      n  = noches
+    """
+    t   = request.args.get("t", "Propiedad")
+    d   = request.args.get("d", "Porto de Galinhas, PE")
+    c   = request.args.get("c", "1")
+    b   = request.args.get("b", "1")
+    h   = request.args.get("h", "2")
+    a   = request.args.get("a", "")
+    p   = request.args.get("p", "")
+    lim = request.args.get("l", "")
+    m   = request.args.get("m", "")
+    orig = request.args.get("o", "")
+    ci  = request.args.get("ci", "")
+    co  = request.args.get("co", "")
+    n   = request.args.get("n", "")
+    wa_num = os.environ.get("WA_NUMBER", "5511999999999")
+
+    amenidades_list = [x.strip() for x in a.split(",") if x.strip()] if a else []
+    amenidades_html = "".join(
+        '<span class="tag">' + x + '</span>' for x in amenidades_list
+    )
+
+    price_html = ""
+    if p:
+        limpieza_div = ('<div class="price-detail">+ R$ ' + lim + ' limpieza</div>') if lim else ''
+        price_html = (
+            '<div class="price-box">'
+            '<div class="price-main">R$ ' + p + '<span class="price-sub"> / noche</span></div>'
+            + limpieza_div +
+            '</div>'
+        )
+
+    dates_html = ""
+    if ci or co:
+        noches_label = (n + (" noches" if n != "1" else " noche")) if n else ""
+        noches_div = ('<div class="date-noches">' + noches_label + '</div>') if noches_label else ''
+        dates_html = (
+            '<div class="dates-box">'
+            '<div class="date-item">'
+            '<span class="date-label">Check-in</span>'
+            '<span class="date-val">' + (ci or "-") + '</span>'
+            '</div>'
+            '<div class="date-sep">to</div>'
+            '<div class="date-item">'
+            '<span class="date-label">Check-out</span>'
+            '<span class="date-val">' + (co or "-") + '</span>'
+            '</div>'
+            + noches_div +
+            '</div>'
+        )
+
+    cuartos_s = "s" if c != "1" else ""
+    banos_s = "s" if b != "1" else ""
+    wa_link = "https://wa.me/" + wa_num + "?text=Hola!+Me+interesa+" + t.replace(" ", "+")
+    maps_btn = ("<a href='" + m + "' class='btn btn-light' target='_blank'>Ver en Google Maps</a>") if m else ""
+    orig_btn = ("<a href='" + orig + "' class='btn btn-light' target='_blank'>Ver anuncio completo</a>") if orig else ""
+    price_card = ("<div class='card'><div class='sec-title'>Precio por noche</div>" + price_html + "</div>") if p else ""
+    dates_card = ("<div class='card'><div class='sec-title'>Tus fechas</div>" + dates_html + "</div>") if (ci or co) else ""
+    amenidades_card = ("<div class='card'><div class='sec-title'>Incluye</div><div class='tags'>" + amenidades_html + "</div></div>") if amenidades_list else ""
+
+    html = """<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>""" + t + """ - Porto Flats</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh}
+.header{background:#87A286;padding:20px 16px;text-align:center}
+.logo{color:#fff;font-size:20px;font-weight:300;letter-spacing:5px;text-transform:uppercase}
+.logo-sub{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}
+.card{background:#fff;border-radius:14px;margin:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.07)}
+.badge{display:inline-block;background:#E7D7C9;color:#3D3D3D;border-radius:20px;padding:4px 14px;font-size:12px;margin-bottom:12px}
+h1{font-size:24px;font-weight:400;line-height:1.3}
+.location{color:#87A286;font-size:13px;margin-top:6px}
+.features{display:flex;gap:16px;margin-top:16px;flex-wrap:wrap}
+.feat{display:flex;align-items:center;gap:6px;font-size:14px;color:#555}
+.feat-icon{font-size:18px}
+.sec-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;margin-bottom:10px}
+.tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{background:#EDE9E3;border-radius:20px;padding:5px 13px;font-size:13px;color:#555}
+.price-box{background:#EDE9E3;border-radius:10px;padding:16px;text-align:center}
+.price-main{font-size:30px;font-weight:300}
+.price-sub{font-size:14px;color:#888}
+.price-detail{font-size:13px;color:#888;margin-top:4px}
+.dates-box{background:#EDE9E3;border-radius:10px;padding:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.date-item{flex:1;min-width:90px}
+.date-label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#87A286;margin-bottom:3px}
+.date-val{font-size:16px;font-weight:500}
+.date-sep{font-size:20px;color:#CDC6C3}
+.date-noches{width:100%;text-align:center;font-size:13px;color:#888;margin-top:6px}
+.btn{display:block;text-align:center;padding:14px;border-radius:10px;font-size:15px;text-decoration:none;margin-top:10px;font-weight:500}
+.btn-green{background:#87A286;color:#fff}
+.btn-light{background:#EDE9E3;color:#3D3D3D}
+.footer{text-align:center;padding:20px 16px 32px;color:#aaa;font-size:12px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">Porto Flats</div>
+  <div class="logo-sub">Porto de Galinhas - Pernambuco - Brasil</div>
+</div>
+<div class="card">
+  <div class="badge">""" + d + """</div>
+  <h1>""" + t + """</h1>
+  <div class="location">Porto de Galinhas - PE - Brasil</div>
+  <div class="features">
+    <div class="feat"><span class="feat-icon">&#x1F6CF;</span>""" + c + """ cuarto""" + cuartos_s + """</div>
+    <div class="feat"><span class="feat-icon">&#x1F6BF;</span>""" + b + """ bano""" + banos_s + """</div>
+    <div class="feat"><span class="feat-icon">&#x1F465;</span>Hasta """ + h + """ personas</div>
+    <div class="feat"><span class="feat-icon">&#x1F30A;</span>Primera linea</div>
+  </div>
+</div>
+""" + price_card + """
+""" + dates_card + """
+""" + amenidades_card + """
+<div class="card">
+  <div class="sec-title">Te interesa?</div>
+  <a href='""" + wa_link + """' class='btn btn-green'>Consultar por WhatsApp</a>
+  """ + maps_btn + """
+  """ + orig_btn + """
+</div>
+<div class="footer">
+  Porto Flats - Alquileres temporarios<br>
+  Porto de Galinhas - Pernambuco - Brasil<br>
+  <small>Pagina generada para tu consulta personal</small>
+</div>
+</body>
+</html>"""
+
+    return Response(html, mimetype="text/html; charset=utf-8")
 
 
 @app.route("/generar-pdf", methods=["POST"])
@@ -48,7 +199,7 @@ def generar_pdf():
                     "checkin", "checkout", "noches", "personas", "total"]
         missing = [f for f in required if f not in data]
         if missing:
-            return jsonify({"error": f"Faltan campos: {missing}"}), 400
+            return jsonify({"error": "Faltan campos: " + str(missing)}), 400
 
         data.setdefault("ubicacion_desc", "Porto de Galinhas, PE, Brasil")
         data.setdefault("caracteristicas", [])
@@ -75,7 +226,7 @@ def generar_pdf():
         os.unlink(tmp_path)
 
         pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
-        filename = f"Presupuesto_PortoFlats_{data['numero']}.pdf"
+        filename = "Presupuesto_PortoFlats_" + data["numero"] + ".pdf"
 
         return jsonify({
             "ok": True,
