@@ -36,6 +36,9 @@ def propiedad_page():
       ci = check-in
       co = check-out
       n  = noches
+      f1 = URL foto 1
+      f2 = URL foto 2
+      f3 = URL foto 3
     """
     t   = request.args.get("t", "Propiedad")
     d   = request.args.get("d", "Porto de Galinhas, PE")
@@ -50,7 +53,16 @@ def propiedad_page():
     ci  = request.args.get("ci", "")
     co  = request.args.get("co", "")
     n   = request.args.get("n", "")
+    f1  = request.args.get("f1", "")
+    f2  = request.args.get("f2", "")
+    f3  = request.args.get("f3", "")
     wa_num = os.environ.get("WA_NUMBER", "5511999999999")
+
+    fotos_list = [f for f in [f1, f2, f3] if f]
+    gallery_html = ""
+    if fotos_list:
+        imgs = "".join(f'<img src="{f}" class="g-img" loading="lazy" onerror="this.style.display=\'none\'">' for f in fotos_list)
+        gallery_html = f'<div class="gallery">{imgs}</div>'
 
     amenidades_list = [x.strip() for x in a.split(",") if x.strip()] if a else []
     amenidades_html = "".join(
@@ -118,6 +130,9 @@ h1{{font-size:24px;font-weight:400;line-height:1.3}}
 .btn-green{{background:#87A286;color:#fff}}
 .btn-light{{background:#EDE9E3;color:#3D3D3D}}
 .footer{{text-align:center;padding:20px 16px 32px;color:#aaa;font-size:12px;line-height:1.7}}
+.gallery{{display:flex;overflow-x:auto;gap:10px;padding:14px 14px 4px;scrollbar-width:none;-ms-overflow-style:none}}
+.gallery::-webkit-scrollbar{{display:none}}
+.g-img{{height:220px;min-width:300px;max-width:340px;object-fit:cover;border-radius:12px;flex-shrink:0;background:#CDC6C3}}
 </style>
 </head>
 <body>
@@ -127,6 +142,7 @@ h1{{font-size:24px;font-weight:400;line-height:1.3}}
   <div class="logo-sub">Porto de Galinhas · Pernambuco · Brasil</div>
 </div>
 
+{gallery_html}
 <div class="card">
   <div class="badge">📍 {d}</div>
   <h1>{t}</h1>
