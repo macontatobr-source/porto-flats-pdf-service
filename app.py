@@ -381,21 +381,25 @@ input:focus,select:focus{border-color:#87A286}
       </div>
       <div class="field">
         <label>Moneda</label>
-        <select name="moneda">
-          <option value="BRL">R$ BRL</option>
-          <option value="ARS">AR$ ARS</option>
-          <option value="USD">US$ USD</option>
-        </select>
+        <input name="moneda" list="monedas" placeholder="BRL">
+        <datalist id="monedas">
+          <option>BRL</option>
+          <option>ARS</option>
+          <option>USD</option>
+        </datalist>
       </div>
     </div>
     <div class="field">
       <label>Forma de pago</label>
-      <select name="forma_pago">
+      <input name="forma_pago" list="formas_pago" placeholder="Transferencia bancaria">
+      <datalist id="formas_pago">
         <option>Transferencia bancaria</option>
         <option>Efectivo BRL</option>
         <option>Efectivo ARS</option>
         <option>Efectivo USD</option>
-      </select>
+        <option>PIX</option>
+        <option>Tarjeta de credito</option>
+      </datalist>
     </div>
     <button type="submit" class="btn" id="btn">Generar Recibo PDF</button>
     <div class="msg" id="msg"></div>
@@ -420,6 +424,7 @@ document.getElementById('f').onsubmit = async function(e) {
     });
     const j = await r.json();
     if (!j.ok) throw new Error(j.error);
+    // Descargar PDF
     const bytes = Uint8Array.from(atob(j.pdf_base64), c => c.charCodeAt(0));
     const blob = new Blob([bytes], {type: 'application/pdf'});
     const url = URL.createObjectURL(blob);
