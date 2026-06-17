@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Porto Flats â Servicio PDF + Mini-anuncio + Panel de RevisiÃ³n
+Porto Flats — Servicio PDF + Mini-anuncio + Panel de Revisión
 Flask service para n8n + WhatsApp automation
 """
 import base64
@@ -17,7 +17,7 @@ from build_recibo import draw_recibo
 
 app = Flask(__name__)
 
-# ââ Evolution API ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── Evolution API ────────────────────────────────────────────────────────────
 EVO_URL  = os.environ.get("EVOLUTION_API_URL",  "https://pf-evolution-api.bg4ga1.easypanel.host")
 EVO_KEY  = os.environ.get("EVOLUTION_API_KEY",  "F08BB21DEC16-4D00-B400-B16F5CC98731")
 EVO_INST = os.environ.get("EVOLUTION_INSTANCE", "Porto Flats")
@@ -45,7 +45,7 @@ def _evo_send_pdf(numero, pdf_b64, filename, caption=""):
             "mediatype": "document",
             "media": pdf_b64,
             "fileName": filename,
-            "caption": caption or "\U0001f4c4 Tu presupuesto Porto Flats. Â¡Estamos a disposiciÃ³n!"
+            "caption": caption or "\U0001f4c4 Tu presupuesto Porto Flats. ¡Estamos a disposición!"
         }, headers=_evo_headers(), timeout=45)
     except Exception as e:
         print(f"[EVO pdf error] {e}")
@@ -58,19 +58,20 @@ def _tinyurl(url):
         return url
 
 
-# ââ /health âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /health ──────────────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "service": "porto-flats-pdf"})
 
 
-# ââ /propiedad ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /propiedad ────────────────────────────────────────────────────────────────
 @app.route("/propiedad", methods=["GET"])
 def propiedad_page():
     """
-    Mini-anuncio de propiedad para el cliente.
-    Params: t, d, c, b, h, a, p, l, m, o, ci, co, n, f1..f10
+    Propuesta completa para el cliente: fotos, detalles, precios, mapa, política.
+    Params: t, d, c, b, h, a, p, l, m, o, ci, co, n, nr, pol, f1..f10
     """
+    from urllib.parse import quote as urlquote
     t    = request.args.get("t", "Propiedad")
     d    = request.args.get("d", "Porto de Galinhas, PE")
     c    = request.args.get("c", "1")
@@ -84,63 +85,134 @@ def propiedad_page():
     ci   = request.args.get("ci", "")
     co   = request.args.get("co", "")
     n    = request.args.get("n", "")
+    nr   = request.args.get("nr", "")   # nombre cliente
+    pol  = request.args.get("pol", "")  # URL política de cancelación
     wa_num = WA_NUM
 
+    # ── Fotos ────────────────────────────────────────────────────────────────
     fotos_list = [request.args.get(f"f{i}", "") for i in range(1, 11)]
     fotos_list = [f for f in fotos_list if f]
-
     gallery_html = ""
     if fotos_list:
         imgs = "".join(
             f'<img src="{f}" class="g-img" loading="lazy" onerror="this.style.display=\'none\'">'
             for f in fotos_list
         )
-        gallery_html = f'<div class="gallery">{imgs}</div>'
+        gallery_html = f'<div class="gallery np">{imgs}</div>'
 
+    # ── Amenidades ───────────────────────────────────────────────────────────
     amenidades_list = [x.strip() for x in a.split(",") if x.strip()] if a else []
     amenidades_html = "".join(f'<span class="tag">{x}</span>' for x in amenidades_list)
 
-    price_html = ""
+    # ── Precios ──────────────────────────────────────────────────────────────
+    try:
+        p_num   = float(str(p).replace(",", "."))   if p   else 0
+        lim_num = float(str(lim).replace(",", ".")) if lim else 0
+        n_num   = int(n) if n else 0
+        total_num = p_num * n_num + lim_num if n_num else 0
+    except Exception:
+        p_num = lim_num = total_num = 0
+        n_num = 0
+    noches_label = f"{n} noche{'s' if str(n) != '1' else ''}" if n else ""
+
+    price_rows = ""
     if p:
-        price_html = f"""
-        <div class="price-box">
-          <div class="price-main">R$ {p}<span class="price-sub"> / noche</span></div>
-          {'<div class="price-detail">+ R$ ' + lim + ' limpieza</div>' if lim else ''}
-        </div>"""
+        price_rows += f'<div class="pr-row"><span>\U0001f319 Precio por noche</span><span>R$ {p}</span></div>'
+    if noches_label:
+        price_rows += f'<div class="pr-row"><span>\U0001f4c5 Noches</span><span>\xd7 {n}</span></div>'
+    if lim:
+        price_rows += f'<div class="pr-row"><span>\U0001f9f9 Tarifa de limpieza</span><span>R$ {lim}</span></div>'
+    if total_num > 0:
+        t_fmt = f"{int(total_num):,}".replace(",", ".")
+        price_rows += f'<div class="pr-row pr-total"><span>\U0001f4b0 Total estimado</span><span>R$ {t_fmt}</span></div>'
+    price_section = (
+        f'<div class="card"><div class="sec-title">Precio estimado</div>'
+        f'<div class="pr-table">{price_rows}</div></div>'
+    ) if price_rows else ""
 
-    dates_html = ""
+    # ── Fechas ───────────────────────────────────────────────────────────────
+    dates_section = ""
     if ci or co:
-        noches_label = f"{n} noche{'s' if n != '1' else ''}" if n else ""
-        dates_html = f"""
-        <div class="dates-box">
-          <div class="date-item">
-            <span class="date-label">Check-in</span>
-            <span class="date-val">{ci or "â"}</span>
-          </div>
-          <div class="date-sep">â</div>
-          <div class="date-item">
-            <span class="date-label">Check-out</span>
-            <span class="date-val">{co or "â"}</span>
-          </div>
-          {'<div class="date-noches">' + noches_label + '</div>' if noches_label else ''}
-        </div>"""
+        dates_section = f"""<div class="card">
+  <div class="sec-title">Tus fechas</div>
+  <div class="dates-box">
+    <div class="date-item"><span class="date-label">Check-in</span><span class="date-val">{ci or "—"}</span></div>
+    <div class="date-sep">→</div>
+    <div class="date-item"><span class="date-label">Check-out</span><span class="date-val">{co or "—"}</span></div>
+    {'<div class="date-noches">' + noches_label + '</div>' if noches_label else ''}
+  </div>
+</div>"""
 
-    _maps_btn = (f"<a href='{m}' class='btn btn-light' target='_blank'>\U0001f4cd "
-                 "Ver en Google Maps</a>" if m else "")
-    _anuncio_btn = (f"<a href='{orig}' class='btn btn-light' target='_blank'>\U0001f517 "
-                    "Ver anuncio completo</a>" if orig else "")
+    # ── Google Maps embed ─────────────────────────────────────────────────────
+    maps_section = ""
+    if m:
+        # Convert Google Maps URL to embeddable version
+        if "google.com/maps" in m and "output=embed" not in m:
+            embed_url = m + ("&" if "?" in m else "?") + "output=embed"
+        elif "maps.google.com/maps?" in m:
+            embed_url = m if "output=embed" in m else m + "&output=embed"
+        else:
+            embed_url = None  # short URL or unsupported
+
+        if embed_url:
+            maps_section = (
+                f'<div class="card np"><div class="sec-title">\U0001f4cd Ubicaci\xf3n</div>'
+                f'<div class="maps-wrap"><iframe src="{embed_url}" width="100%" height="220" '
+                f'frameborder="0" style="border:0;border-radius:12px;display:block" '
+                f'allowfullscreen loading="lazy"></iframe></div>'
+                f'<a href="{m}" class="btn btn-maps" target="_blank">\U0001f5fa Ver en Google Maps</a></div>'
+            )
+        else:
+            maps_section = (
+                f'<div class="card np"><div class="sec-title">\U0001f4cd Ubicaci\xf3n</div>'
+                f'<a href="{m}" class="btn btn-maps" target="_blank">\U0001f5fa Abrir en Google Maps</a></div>'
+            )
+    else:
+        loc_q = urlquote(f"{t}, Porto de Galinhas, Pernambuco, Brasil")
+        maps_section = (
+            f'<div class="card np"><div class="sec-title">\U0001f4cd Ubicaci\xf3n</div>'
+            f'<div class="maps-wrap"><iframe src="https://maps.google.com/maps?q={loc_q}&output=embed" '
+            f'width="100%" height="200" frameborder="0" style="border:0;border-radius:12px;display:block" '
+            f'allowfullscreen loading="lazy"></iframe></div></div>'
+        )
+
+    # ── Política de cancelación ───────────────────────────────────────────────
+    if pol:
+        pol_section = (
+            f'<div class="card"><div class="sec-title">Pol\xedtica de cancelaci\xf3n</div>'
+            f'<a href="{pol}" class="btn btn-light" target="_blank">\U0001f4cb Ver pol\xedtica completa</a></div>'
+        )
+    else:
+        pol_section = """<div class="card">
+  <div class="sec-title">Pol\xedtica de cancelaci\xf3n</div>
+  <div class="policy">
+    <div class="pol-item">✅ Reserva confirmada con <strong>anticipo del 50%</strong></div>
+    <div class="pol-item">\U0001f4c5 Saldo abonado <strong>15 d\xedas antes</strong> del check-in</div>
+    <div class="pol-item">\U0001f504 Cancelaci\xf3n +30 d\xedas: reembolso del anticipo (menos tasas)</div>
+    <div class="pol-item">❌ Cancelaci\xf3n -30 d\xedas: sin reembolso</div>
+    <div class="pol-item">\U0001f4b3 Pago: transferencia bancaria o PIX</div>
+  </div>
+</div>"""
+
+    # ── Saludo cliente ────────────────────────────────────────────────────────
+    greeting = (
+        f'<div class="greeting">Preparado especialmente para <strong>{nr}</strong> \U0001f30a</div>'
+        if nr else ""
+    )
+
     html = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>{t} Â· Porto Flats</title>
+<title>{t} \xb7 Porto Flats</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh}}
 .header{{background:#87A286;padding:20px 16px;text-align:center}}
 .logo{{color:#fff;font-size:20px;font-weight:300;letter-spacing:5px;text-transform:uppercase}}
 .logo-sub{{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}}
+.greeting{{background:#E7D7C9;text-align:center;padding:10px 16px;font-size:14px;color:#5a4a3a}}
 .card{{background:#fff;border-radius:14px;margin:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.07)}}
 .badge{{display:inline-block;background:#E7D7C9;color:#3D3D3D;border-radius:20px;padding:4px 14px;font-size:12px;margin-bottom:12px}}
 h1{{font-size:24px;font-weight:400;line-height:1.3}}
@@ -148,64 +220,81 @@ h1{{font-size:24px;font-weight:400;line-height:1.3}}
 .features{{display:flex;gap:16px;margin-top:16px;flex-wrap:wrap}}
 .feat{{display:flex;align-items:center;gap:6px;font-size:14px;color:#555}}
 .feat-icon{{font-size:18px}}
-.sec-title{{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;margin-bottom:10px}}
+.sec-title{{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;margin-bottom:12px}}
 .tags{{display:flex;flex-wrap:wrap;gap:8px}}
 .tag{{background:#EDE9E3;border-radius:20px;padding:5px 13px;font-size:13px;color:#555}}
-.price-box{{background:#EDE9E3;border-radius:10px;padding:16px;text-align:center}}
-.price-main{{font-size:30px;font-weight:300}}
-.price-sub{{font-size:14px;color:#888}}
-.price-detail{{font-size:13px;color:#888;margin-top:4px}}
+.pr-table{{background:#EDE9E3;border-radius:10px;padding:4px 14px}}
+.pr-row{{display:flex;justify-content:space-between;align-items:center;padding:10px 0;font-size:14px;border-bottom:1px solid rgba(0,0,0,.06)}}
+.pr-row:last-child{{border-bottom:none}}
+.pr-total{{font-weight:700;font-size:16px;color:#87A286;padding-top:12px;margin-top:4px;border-top:2px solid rgba(135,162,134,.3)!important;border-bottom:none!important}}
 .dates-box{{background:#EDE9E3;border-radius:10px;padding:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}}
 .date-item{{flex:1;min-width:90px}}
 .date-label{{display:block;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#87A286;margin-bottom:3px}}
 .date-val{{font-size:16px;font-weight:500}}
 .date-sep{{font-size:20px;color:#CDC6C3}}
 .date-noches{{width:100%;text-align:center;font-size:13px;color:#888;margin-top:6px}}
-.btn{{display:block;text-align:center;padding:14px;border-radius:10px;font-size:15px;text-decoration:none;margin-top:10px;font-weight:500}}
+.btn{{display:block;text-align:center;padding:14px;border-radius:10px;font-size:15px;text-decoration:none;margin-top:10px;font-weight:500;cursor:pointer;border:none;width:100%;font-family:inherit}}
 .btn-green{{background:#87A286;color:#fff}}
+.btn-pdf{{background:#3D3D3D;color:#fff;font-size:14px;padding:12px}}
+.btn-maps{{background:#4a90d9;color:#fff}}
 .btn-light{{background:#EDE9E3;color:#3D3D3D}}
+.maps-wrap{{border-radius:12px;overflow:hidden;margin-bottom:12px}}
+.policy{{padding:4px 0}}
+.pol-item{{font-size:13px;padding:7px 0;color:#555;border-bottom:1px solid #EDE9E3}}
+.pol-item:last-child{{border-bottom:none}}
 .footer{{text-align:center;padding:20px 16px 32px;color:#aaa;font-size:12px;line-height:1.7}}
 .gallery{{display:flex;overflow-x:auto;gap:10px;padding:14px 14px 4px;scrollbar-width:none;-ms-overflow-style:none}}
 .gallery::-webkit-scrollbar{{display:none}}
 .g-img{{height:220px;min-width:300px;max-width:340px;object-fit:cover;border-radius:12px;flex-shrink:0;background:#CDC6C3}}
+@media print{{
+  .np{{display:none!important}}
+  body{{background:#fff}}
+  .card{{box-shadow:none;border:1px solid #eee;margin:6px;page-break-inside:avoid}}
+  .header{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  .pr-table,.dates-box{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  .greeting{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+}}
 </style>
 </head>
 <body>
 <div class="header">
   <div class="logo">Porto Flats</div>
-  <div class="logo-sub">Porto de Galinhas Â· Pernambuco Â· Brasil</div>
+  <div class="logo-sub">Porto de Galinhas \xb7 Pernambuco \xb7 Brasil</div>
 </div>
+{greeting}
 {gallery_html}
 <div class="card">
   <div class="badge">\U0001f4cd {d}</div>
   <h1>{t}</h1>
-  <div class="location">Porto de Galinhas Â· PE Â· Brasil</div>
+  <div class="location">Porto de Galinhas \xb7 PE \xb7 Brasil</div>
   <div class="features">
     <div class="feat"><span class="feat-icon">\U0001f6cf</span>{c} cuarto{"s" if c != "1" else ""}</div>
-    <div class="feat"><span class="feat-icon">\U0001f6bf</span>{b} baÃ±o{"s" if b != "1" else ""}</div>
+    <div class="feat"><span class="feat-icon">\U0001f6bf</span>{b} ba\xf1o{"s" if b != "1" else ""}</div>
     <div class="feat"><span class="feat-icon">\U0001f465</span>Hasta {h} personas</div>
   </div>
 </div>
-{"<div class='card'><div class='sec-title'>Precio por noche</div>" + price_html + "</div>" if p else ""}
-{"<div class='card'><div class='sec-title'>Tus fechas</div>" + dates_html + "</div>" if (ci or co) else ""}
+{dates_section}
+{price_section}
 {"<div class='card'><div class='sec-title'>Incluye</div><div class='tags'>" + amenidades_html + "</div></div>" if amenidades_list else ""}
-<div class="card">
-  <div class="sec-title">Â¿Te interesa?</div>
+{maps_section}
+{pol_section}
+<div class="card np">
+  <div class="sec-title">¿Te interesa? Confirm\xe1 tu reserva</div>
   <a href="https://wa.me/{wa_num}?text=Hola!+Me+interesa+{t.replace(' ', '+')}" class="btn btn-green">\U0001f4ac Consultar por WhatsApp</a>
-  {_maps_btn}
-  {_anuncio_btn}
+  {"<a href='" + orig + "' class='btn btn-light' target='_blank'>\U0001f517 Ver anuncio completo</a>" if orig else ""}
+  <button class="btn btn-pdf np" onclick="window.print()" style="margin-top:10px">⬇️ Descargar como PDF</button>
 </div>
-<div class="footer">
-  Porto Flats Â· Alquileres temporarios<br>
-  Porto de Galinhas Â· Pernambuco Â· Brasil<br>
-  <small>PÃ¡gina generada para tu consulta personal</small>
+<div class="footer np">
+  Porto Flats \xb7 Alquileres temporarios<br>
+  Porto de Galinhas \xb7 Pernambuco \xb7 Brasil<br>
+  <small>Esta propuesta fue preparada especialmente para vos</small>
 </div>
 </body>
 </html>"""
     return Response(html, mimetype="text/html; charset=utf-8")
 
 
-# ââ /generar-pdf âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /generar-pdf ─────────────────────────────────────────────────────────────
 @app.route("/generar-pdf", methods=["POST"])
 def generar_pdf():
     """
@@ -259,7 +348,7 @@ def generar_pdf():
             data.setdefault("items_precio", [])
             data.setdefault("condiciones", [
                 "Reserva confirma con anticipo del 50% del valor total.",
-                "Saldo se abona 15 dÃ­as antes del check-in.",
+                "Saldo se abona 15 días antes del check-in.",
                 "Pago: transferencia bancaria (Brasil) o consultar en pesos ARG."
             ])
             data.setdefault("ubicacion_link", "https://portoflats-my-site-1.wixsite.com/porto-flats")
@@ -288,7 +377,7 @@ def generar_pdf():
         return jsonify({"error": str(e)}), 500
 
 
-# ââ /generar-recibo âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /generar-recibo ───────────────────────────────────────────────────────────
 @app.route("/generar-recibo", methods=["POST"])
 def generar_recibo():
     """
@@ -334,11 +423,11 @@ def generar_recibo():
         return jsonify({"error": str(e)}), 500
 
 
-# ââ /despachar ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /despachar ────────────────────────────────────────────────────────────────
 @app.route("/despachar", methods=["POST"])
 def despachar():
     """
-    Recibe datos editados del Panel, genera PDF y envÃ­a WhatsApp al cliente.
+    Recibe datos editados del Panel, genera PDF y envía WhatsApp al cliente.
     Body JSON: cliente, numero_wa, propiedad, personas, checkin, hora_checkin,
                checkout, hora_checkout, noches, distancia, caracteristicas[],
                total_brl, limpieza_brl, cochera, traslado, forma_pago,
@@ -375,11 +464,11 @@ def despachar():
         obs         = (data.get("observaciones", "") or "").strip()
         fotos       = [f for f in data.get("fotos", []) if f and str(f).strip()]
 
-        # ââ NÃºmero de presupuesto âââââââââââââââââââââââââââââ
+        # ── Número de presupuesto ─────────────────────────────
         num_pres = data.get("numero_pres") or str(int(datetime.now().timestamp() * 1000))[-6:]
         fecha    = datetime.now().strftime("%d/%m/%Y")
 
-        # ââ Mini-anuncio URL ââââââââââââââââââââââââââââââââââ
+        # ── Mini-anuncio URL ──────────────────────────────────
         BASE_URL = os.environ.get("SERVICE_URL", "https://pf-pdf-service.bg4ga1.easypanel.host")
         from urllib.parse import urlencode, quote
 
@@ -401,7 +490,7 @@ def despachar():
 
         short_url = _tinyurl(mini_url)
 
-        # ââ Mensaje WhatsApp ââââââââââââââââââââââââââââââââââ
+        # ── Mensaje WhatsApp ──────────────────────────────────
         eW = "\U0001f44b"
         ePF = "\U0001f3d6"
         eCal = "\U0001f4c5"
@@ -409,21 +498,21 @@ def despachar():
         eCasa = "\U0001f3e1"
         eMoney = "\U0001f4b0"
         eLink = "\U0001f517"
-        DIV = "â" * 16
+        DIV = "━" * 16
 
         nombre_corto = cliente.split()[0].title() if cliente else "cliente"
-        feats_txt = "\n".join(f"â¢ {f}" for f in caracteristicas[:8])
+        feats_txt = "\n".join(f"• {f}" for f in caracteristicas[:8])
 
         msg = f"{eW} Hola {nombre_corto}!\n\n"
         msg += f"Somos *Porto Flats* {ePF}\n"
         msg += f"Te enviamos tu presupuesto para Porto de Galinhas!\n\n"
-        msg += f"{eCal} Check-in:  *{checkin}* Â· desde las {hora_ci}\n"
-        msg += f"{eCal} Check-out: *{checkout}* Â· hasta las {hora_co}\n"
+        msg += f"{eCal} Check-in:  *{checkin}* · desde las {hora_ci}\n"
+        msg += f"{eCal} Check-out: *{checkout}* · hasta las {hora_co}\n"
         msg += f"{eMoon} *{noches} noches*\n\n"
         msg += f"{DIV}\n\n"
         msg += f"{eCasa} *{propiedad}*\n"
         if distancia:
-            msg += f"â {distancia}\n"
+            msg += f"★ {distancia}\n"
         if feats_txt:
             msg += feats_txt + "\n"
         msg += f"\n{eMoney} *Total: R$ {int(total_brl):,}*".replace(",", ".")
@@ -431,11 +520,11 @@ def despachar():
         msg += f"{DIV}\n\n"
         msg += f"{eLink} Ver fotos y detalles:\n{short_url}\n\n"
         if obs:
-            msg += f"â¹ï¸ {obs}\n\n"
-        msg += f"Cualquier consulta, estamos a disposiciÃ³n!\n"
+            msg += f"ℹ️ {obs}\n\n"
+        msg += f"Cualquier consulta, estamos a disposición!\n"
         msg += f"*Porto Flats* {ePF}"
 
-        # ââ Generar PDF âââââââââââââââââââââââââââââââââââââââ
+        # ── Generar PDF ───────────────────────────────────────
         pdf_data = {
             "numero":       num_pres,
             "fecha":        fecha,
@@ -473,17 +562,17 @@ def despachar():
         pdf_b64  = base64.b64encode(pdf_bytes).decode("utf-8")
         filename = f"Presupuesto_PortoFlats_{num_pres}.pdf"
 
-        # ââ Enviar WhatsApp âââââââââââââââââââââââââââââââââââ
+        # ── Enviar WhatsApp ───────────────────────────────────
         _evo_send_text(numero_wa, msg)
         _evo_send_pdf(numero_wa, pdf_b64, filename)
 
-        # ââ Notificar a Marcelo âââââââââââââââââââââââââââââââ
-        confirmacion = (f"â Presupuesto enviado a *{nombre_corto}* ({numero_wa})\n"
-                        f"Total: R$ {int(total_brl):,} Â· {noches} noches\n"
+        # ── Notificar a Marcelo ───────────────────────────────
+        confirmacion = (f"✅ Presupuesto enviado a *{nombre_corto}* ({numero_wa})\n"
+                        f"Total: R$ {int(total_brl):,} · {noches} noches\n"
                         f"Propiedad: {propiedad}").replace(",", ".")
         _evo_send_text(MARCELO_NUM, confirmacion)
 
-        # ââ Actualizar Sheets vÃ­a n8n (si estÃ¡ configurado) âââ
+        # ── Actualizar Sheets vía n8n (si está configurado) ───
         if N8N_STATUS_WH:
             try:
                 http.post(N8N_STATUS_WH, json={
@@ -507,12 +596,12 @@ def despachar():
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 
-# ââ /panel ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /panel ────────────────────────────────────────────────────────────────────
 @app.route("/panel", methods=["GET"])
 def panel():
     """
-    Panel de RevisiÃ³n para que Marcelo edite y apruebe antes de enviar.
-    ParÃ¡metro opcional: ?d=BASE64_JSON con datos pre-cargados desde WF01.
+    Panel de Revisión para que Marcelo edite y apruebe antes de enviar.
+    Parámetro opcional: ?d=BASE64_JSON con datos pre-cargados desde WF01.
     """
     d_param = request.args.get("d", "")
     pdata = {}
@@ -550,7 +639,7 @@ def panel():
 
     feats = []
     if opt.get("quartos"):   feats.append(f"{opt['quartos']} cuarto(s)")
-    if opt.get("banheiros"): feats.append(f"{opt['banheiros']} baÃ±o(s)")
+    if opt.get("banheiros"): feats.append(f"{opt['banheiros']} baño(s)")
     if opt.get("hospedes"):  feats.append(f"Hasta {opt['hospedes']} personas")
     if opt.get("amenidades"):
         feats += [x.strip() for x in str(opt["amenidades"]).split(",") if x.strip()]
@@ -561,7 +650,7 @@ def panel():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Panel de RevisiÃ³n Â· Porto Flats</title>
+<title>Panel de Revisión · Porto Flats</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh}}
@@ -603,7 +692,7 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
 <body>
 <div class="header">
   <div class="logo">PORTO FLATS</div>
-  <div class="logo-sub">Panel de RevisiÃ³n</div>
+  <div class="logo-sub">Panel de Revisión</div>
 </div>
 
 <!-- CLIENTE -->
@@ -614,7 +703,7 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
     <input id="cliente" value="{pre_cliente}" placeholder="MARIA DE LOS ANGELES ROLANDI" required>
   </div>
   <div class="field">
-    <label>WhatsApp (con cÃ³digo de paÃ­s)</label>
+    <label>WhatsApp (con código de país)</label>
     <input id="numero_wa" value="{pre_wa}" placeholder="5491112345678" required>
     <p class="tip">Sin +, sin espacios. Ej: 5491112345678</p>
   </div>
@@ -643,13 +732,13 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
       <input id="cuartos" type="number" min="0" max="10" value="{pre_cuartos or 1}">
     </div>
     <div class="field">
-      <label>BaÃ±os</label>
+      <label>Baños</label>
       <input id="banos" type="number" min="0" max="10" value="{pre_banos or 1}">
     </div>
   </div>
   <div class="field">
-    <label>CaracterÃ­sticas (una por lÃ­nea)</label>
-    <textarea id="caracteristicas" rows="5" placeholder="Estudio&#10;1 baÃ±o&#10;Aire acondicionado&#10;Wi-Fi&#10;Cocina equipada">{pre_caracteristicas}</textarea>
+    <label>Características (una por línea)</label>
+    <textarea id="caracteristicas" rows="5" placeholder="Estudio&#10;1 baño&#10;Aire acondicionado&#10;Wi-Fi&#10;Cocina equipada">{pre_caracteristicas}</textarea>
   </div>
 </div>
 
@@ -698,15 +787,15 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
   <div class="calc-box">
     <div class="calc-row">
       <span class="calc-label">Diaria regular (tachada en PDF):</span>
-      <span class="calc-val strike" id="diaria_reg">R$ â</span>
+      <span class="calc-val strike" id="diaria_reg">R$ —</span>
     </div>
     <div class="calc-row">
       <span class="calc-label">Diaria c/descuento:</span>
-      <span class="calc-val" id="diaria_desc">R$ â</span>
+      <span class="calc-val" id="diaria_desc">R$ —</span>
     </div>
     <div class="calc-row" style="margin-top:8px;padding-top:8px;border-top:1px solid #CDC6C3">
       <span class="calc-label" style="font-weight:700">TOTAL:</span>
-      <span class="calc-val main" id="total_disp">R$ â</span>
+      <span class="calc-val main" id="total_disp">R$ —</span>
     </div>
   </div>
   <div class="field">
@@ -717,7 +806,7 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
     </datalist>
   </div>
   <div class="field">
-    <label>Traslado (dejar vacÃ­o si no aplica)</label>
+    <label>Traslado (dejar vacío si no aplica)</label>
     <input id="traslado" placeholder="Incluido / R$ 80 ida y vuelta">
   </div>
   <div class="row">
@@ -751,14 +840,14 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
   </label>
   <div id="fotos-section">
     {''.join(f'<div class="foto-field"><span class="foto-num">{i}</span><input id="f{i}" type="url" placeholder="https://..."></div>' for i in range(1, 11))}
-    <p class="tip">PegÃ¡ URLs de Google Drive, Wix Media, Dropbox, etc.</p>
+    <p class="tip">Pegá URLs de Google Drive, Wix Media, Dropbox, etc.</p>
   </div>
 </div>
 
 <!-- ENVIAR -->
 <div class="card">
   <button class="btn-enviar" id="btn-enviar" onclick="enviar()">
-    â Enviar al cliente
+    ✅ Enviar al cliente
   </button>
   <div class="msg-box" id="msg-box"></div>
 </div>
@@ -789,7 +878,7 @@ async function enviar() {{
   const btn = document.getElementById('btn-enviar');
   const msgBox = document.getElementById('msg-box');
   btn.disabled = true;
-  btn.textContent = 'Enviandoâ¦';
+  btn.textContent = 'Enviando…';
   msgBox.style.display = 'none';
 
   const feats = document.getElementById('caracteristicas').value
@@ -827,14 +916,14 @@ async function enviar() {{
     rowTimestamp: document.getElementById('rowTimestamp').value,
   }};
 
-  // Validaciones bÃ¡sicas
+  // Validaciones básicas
   if (!payload.cliente || !payload.numero_wa || !payload.propiedad) {{
     showMsg('Falta nombre, WhatsApp o propiedad.', false);
-    btn.disabled = false; btn.textContent = 'â Enviar al cliente'; return;
+    btn.disabled = false; btn.textContent = '✅ Enviar al cliente'; return;
   }}
   if (payload.total_brl <= 0) {{
     showMsg('El total debe ser mayor a 0.', false);
-    btn.disabled = false; btn.textContent = 'â Enviar al cliente'; return;
+    btn.disabled = false; btn.textContent = '✅ Enviar al cliente'; return;
   }}
 
   try {{
@@ -845,15 +934,15 @@ async function enviar() {{
     }});
     const j = await r.json();
     if (j.ok) {{
-      showMsg('â Enviado! Presupuesto NÂ° ' + j.num_pres + ' â PDF + mensaje enviados al cliente.', true);
-      btn.textContent = 'â Enviado';
+      showMsg('✅ Enviado! Presupuesto N° ' + j.num_pres + ' — PDF + mensaje enviados al cliente.', true);
+      btn.textContent = '✅ Enviado';
     }} else {{
       showMsg('Error: ' + (j.error || 'desconocido'), false);
-      btn.disabled = false; btn.textContent = 'â Enviar al cliente';
+      btn.disabled = false; btn.textContent = '✅ Enviar al cliente';
     }}
   }} catch(e) {{
     showMsg('Error de red: ' + e.message, false);
-    btn.disabled = false; btn.textContent = 'â Enviar al cliente';
+    btn.disabled = false; btn.textContent = '✅ Enviar al cliente';
   }}
 }}
 
@@ -872,7 +961,7 @@ recalc();
     return Response(html, mimetype="text/html; charset=utf-8")
 
 
-# ââ /recibo-form ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /recibo-form ──────────────────────────────────────────────────────────────
 @app.route("/recibo-form", methods=["GET"])
 def recibo_form():
     """Formulario web para generar recibo manualmente."""
@@ -881,7 +970,7 @@ def recibo_form():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Generar Recibo Â· Porto Flats</title>
+<title>Generar Recibo · Porto Flats</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh}
@@ -911,7 +1000,7 @@ input:focus,select:focus{border-color:#87A286}
   <form id="f">
     <div class="row">
       <div class="field">
-        <label>NÂ° Recibo</label>
+        <label>N° Recibo</label>
         <input name="numero" placeholder="REC-001" required>
       </div>
       <div class="field">
@@ -947,7 +1036,7 @@ input:focus,select:focus{border-color:#87A286}
         <option>Anticipo 50%</option>
         <option>Saldo 50%</option>
         <option>Pago total</option>
-        <option>SeÃ±al reserva</option>
+        <option>Señal reserva</option>
       </select>
     </div>
     <div class="row">
