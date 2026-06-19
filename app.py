@@ -8,7 +8,7 @@ import json
 import os
 import tempfile
 import textwrap
-from datetime import datetime
+from datetime import datetimeh
 
 import requests as http
 from flask import Flask, request, jsonify, Response
@@ -281,7 +281,7 @@ h1{{font-size:24px;font-weight:400;line-height:1.3}}
 <div class="card np">
   <div class="sec-title">¿Te interesa? Confirm\xe1 tu reserva</div>
   <a href="https://wa.me/{wa_num}?text=Hola!+Me+interesa+{t.replace(' ', '+')}" class="btn btn-green">\U0001f4ac Consultar por WhatsApp</a>
-  {"<a href='" + orig + "' class='btn btn-light' target='_blank'>\U0001f517 Ver anuncio completo</a>" if orig else ""}
+  {"<a href='" + orig + "' class='btn btn-light' target='_blank'>🔗 Ver anuncio completo</a>" if orig else ""}
   <button class="btn btn-pdf np" onclick="window.print()" style="margin-top:10px">⬇️ Descargar como PDF</button>
 </div>
 <div class="footer np">
@@ -497,7 +497,7 @@ def despachar():
         eMoon = "\U0001f319"
         eCasa = "\U0001f3e1"
         eMoney = "\U0001f4b0"
-        eLink = "\U0001f517"
+        eLink = "🔗"
         DIV = "━" * 16
 
         nombre_corto = cliente.split()[0].title() if cliente else "cliente"
