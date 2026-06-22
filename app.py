@@ -8,7 +8,7 @@ import json
 import os
 import tempfile
 import textwrap
-from datetime import datetimeh
+from datetime import datetime
 
 import requests as http
 from flask import Flask, request, jsonify, Response
@@ -95,14 +95,14 @@ def propiedad_page():
     gallery_html = ""
     if fotos_list:
         imgs = "".join(
-            f'<img src="{f}" class="g-img" loading="lazy" onerror="this.style.display=\'none\'">'
+            '<img src="' + f + '" class="g-img" loading="lazy" onerror="this.style.display=\'none\'">'
             for f in fotos_list
         )
-        gallery_html = f'<div class="gallery np">{imgs}</div>'
+        gallery_html = '<div class="gallery np">' + imgs + '</div>'
 
     # ── Amenidades ───────────────────────────────────────────────────────────
     amenidades_list = [x.strip() for x in a.split(",") if x.strip()] if a else []
-    amenidades_html = "".join(f'<span class="tag">{x}</span>' for x in amenidades_list)
+    amenidades_html = "".join('<span class="tag">' + x + '</span>' for x in amenidades_list)
 
     # ── Precios ──────────────────────────────────────────────────────────────
     try:
@@ -113,147 +113,170 @@ def propiedad_page():
     except Exception:
         p_num = lim_num = total_num = 0
         n_num = 0
-    noches_label = f"{n} noche{'s' if str(n) != '1' else ''}" if n else ""
+
+    if n:
+        noches_label = str(n) + " noche" + ("s" if str(n) != "1" else "")
+    else:
+        noches_label = ""
 
     price_rows = ""
     if p:
-        price_rows += f'<div class="pr-row"><span>\U0001f319 Precio por noche</span><span>R$ {p}</span></div>'
+        price_rows += '<div class="pr-row"><span>\U0001f319 Precio por noche</span><span>R$ ' + str(p) + '</span></div>'
     if noches_label:
-        price_rows += f'<div class="pr-row"><span>\U0001f4c5 Noches</span><span>\xd7 {n}</span></div>'
+        price_rows += '<div class="pr-row"><span>\U0001f4c5 Noches</span><span>\xd7 ' + str(n) + '</span></div>'
     if lim:
-        price_rows += f'<div class="pr-row"><span>\U0001f9f9 Tarifa de limpieza</span><span>R$ {lim}</span></div>'
+        price_rows += '<div class="pr-row"><span>\U0001f9f9 Tarifa de limpieza</span><span>R$ ' + str(lim) + '</span></div>'
     if total_num > 0:
-        t_fmt = f"{int(total_num):,}".replace(",", ".")
-        price_rows += f'<div class="pr-row pr-total"><span>\U0001f4b0 Total estimado</span><span>R$ {t_fmt}</span></div>'
-    price_section = (
-        f'<div class="card"><div class="sec-title">Precio estimado</div>'
-        f'<div class="pr-table">{price_rows}</div></div>'
-    ) if price_rows else ""
+        t_fmt = str("{:,}".format(int(total_num))).replace(",", ".")
+        price_rows += '<div class="pr-row pr-total"><span>\U0001f4b0 Total estimado</span><span>R$ ' + t_fmt + '</span></div>'
+    if price_rows:
+        price_section = '<div class="card"><div class="sec-title">Precio estimado</div><div class="pr-table">' + price_rows + '</div></div>'
+    else:
+        price_section = ""
 
     # ── Fechas ───────────────────────────────────────────────────────────────
     dates_section = ""
     if ci or co:
-        dates_section = f"""<div class="card">
-  <div class="sec-title">Tus fechas</div>
-  <div class="dates-box">
-    <div class="date-item"><span class="date-label">Check-in</span><span class="date-val">{ci or "—"}</span></div>
-    <div class="date-sep">→</div>
-    <div class="date-item"><span class="date-label">Check-out</span><span class="date-val">{co or "—"}</span></div>
-    {'<div class="date-noches">' + noches_label + '</div>' if noches_label else ''}
-  </div>
-</div>"""
+        noches_div = ('<div class="date-noches">' + noches_label + '</div>') if noches_label else ""
+        dates_section = (
+            '<div class="card">'
+            '<div class="sec-title">Tus fechas</div>'
+            '<div class="dates-box">'
+            '<div class="date-item"><span class="date-label">Check-in</span><span class="date-val">' + (ci or "—") + '</span></div>'
+            '<div class="date-sep">→</div>'
+            '<div class="date-item"><span class="date-label">Check-out</span><span class="date-val">' + (co or "—") + '</span></div>'
+            + noches_div +
+            '</div>'
+            '</div>'
+        )
 
     # ── Google Maps embed ─────────────────────────────────────────────────────
     maps_section = ""
     if m:
-        # Convert Google Maps URL to embeddable version
         if "google.com/maps" in m and "output=embed" not in m:
             embed_url = m + ("&" if "?" in m else "?") + "output=embed"
         elif "maps.google.com/maps?" in m:
             embed_url = m if "output=embed" in m else m + "&output=embed"
         else:
-            embed_url = None  # short URL or unsupported
+            embed_url = None
 
         if embed_url:
             maps_section = (
-                f'<div class="card np"><div class="sec-title">\U0001f4cd Ubicaci\xf3n</div>'
-                f'<div class="maps-wrap"><iframe src="{embed_url}" width="100%" height="220" '
-                f'frameborder="0" style="border:0;border-radius:12px;display:block" '
-                f'allowfullscreen loading="lazy"></iframe></div>'
-                f'<a href="{m}" class="btn btn-maps" target="_blank">\U0001f5fa Ver en Google Maps</a></div>'
+                '<div class="card np"><div class="sec-title">\U0001f4cd Ubicaci\xf3n</div>'
+                '<div class="maps-wrap"><iframe src="' + embed_url + '" width="100%" height="220" '
+                'frameborder="0" style="border:0;border-radius:12px;display:block" '
+                'allowfullscreen loading="lazy"></iframe></div>'
+                '<a href="' + m + '" class="btn btn-maps" target="_blank">\U0001f5fa Ver en Google Maps</a></div>'
             )
         else:
             maps_section = (
-                f'<div class="card np"><div class="sec-title">\U0001f4cd Ubicaci\xf3n</div>'
-                f'<a href="{m}" class="btn btn-maps" target="_blank">\U0001f5fa Abrir en Google Maps</a></div>'
+                '<div class="card np"><div class="sec-title">\U0001f4cd Ubicaci\xf3n</div>'
+                '<a href="' + m + '" class="btn btn-maps" target="_blank">\U0001f5fa Abrir en Google Maps</a></div>'
             )
     else:
-        loc_q = urlquote(f"{t}, Porto de Galinhas, Pernambuco, Brasil")
+        loc_q = urlquote(t + ", Porto de Galinhas, Pernambuco, Brasil")
         maps_section = (
-            f'<div class="card np"><div class="sec-title">\U0001f4cd Ubicaci\xf3n</div>'
-            f'<div class="maps-wrap"><iframe src="https://maps.google.com/maps?q={loc_q}&output=embed" '
-            f'width="100%" height="200" frameborder="0" style="border:0;border-radius:12px;display:block" '
-            f'allowfullscreen loading="lazy"></iframe></div></div>'
+            '<div class="card np"><div class="sec-title">\U0001f4cd Ubicaci\xf3n</div>'
+            '<div class="maps-wrap"><iframe src="https://maps.google.com/maps?q=' + loc_q + '&output=embed" '
+            'width="100%" height="200" frameborder="0" style="border:0;border-radius:12px;display:block" '
+            'allowfullscreen loading="lazy"></iframe></div></div>'
         )
 
     # ── Política de cancelación ───────────────────────────────────────────────
     if pol:
         pol_section = (
-            f'<div class="card"><div class="sec-title">Pol\xedtica de cancelaci\xf3n</div>'
-            f'<a href="{pol}" class="btn btn-light" target="_blank">\U0001f4cb Ver pol\xedtica completa</a></div>'
+            '<div class="card"><div class="sec-title">Pol\xedtica de cancelaci\xf3n</div>'
+            '<a href="' + pol + '" class="btn btn-light" target="_blank">\U0001f4cb Ver pol\xedtica completa</a></div>'
         )
     else:
-        pol_section = """<div class="card">
-  <div class="sec-title">Pol\xedtica de cancelaci\xf3n</div>
-  <div class="policy">
-    <div class="pol-item">✅ Reserva confirmada con <strong>anticipo del 50%</strong></div>
-    <div class="pol-item">\U0001f4c5 Saldo abonado <strong>15 d\xedas antes</strong> del check-in</div>
-    <div class="pol-item">\U0001f504 Cancelaci\xf3n +30 d\xedas: reembolso del anticipo (menos tasas)</div>
-    <div class="pol-item">❌ Cancelaci\xf3n -30 d\xedas: sin reembolso</div>
-    <div class="pol-item">\U0001f4b3 Pago: transferencia bancaria o PIX</div>
-  </div>
-</div>"""
+        pol_section = (
+            '<div class="card">'
+            '<div class="sec-title">Pol\xedtica de cancelaci\xf3n</div>'
+            '<div class="policy">'
+            '<div class="pol-item">✅ Reserva confirmada con <strong>anticipo del 50%</strong></div>'
+            '<div class="pol-item">\U0001f4c5 Saldo abonado <strong>15 d\xedas antes</strong> del check-in</div>'
+            '<div class="pol-item">\U0001f504 Cancelaci\xf3n +30 d\xedas: reembolso del anticipo (menos tasas)</div>'
+            '<div class="pol-item">❌ Cancelaci\xf3n -30 d\xedas: sin reembolso</div>'
+            '<div class="pol-item">\U0001f4b3 Pago: transferencia bancaria o PIX</div>'
+            '</div>'
+            '</div>'
+        )
 
     # ── Saludo cliente ────────────────────────────────────────────────────────
-    greeting = (
-        f'<div class="greeting">Preparado especialmente para <strong>{nr}</strong> \U0001f30a</div>'
-        if nr else ""
-    )
+    if nr:
+        greeting = '<div class="greeting">Preparado especialmente para <strong>' + nr + '</strong> \U0001f30a</div>'
+    else:
+        greeting = ""
 
-    html = f"""<!DOCTYPE html>
+    # ── Amenidades section ───────────────────────────────────────────────────
+    if amenidades_list:
+        amenidades_section = '<div class="card"><div class="sec-title">Incluye</div><div class="tags">' + amenidades_html + '</div></div>'
+    else:
+        amenidades_section = ""
+
+    # ── Ver anuncio link ─────────────────────────────────────────────────────
+    if orig:
+        orig_link = '<a href="' + orig + '" class="btn btn-light" target="_blank">\U0001f517 Ver anuncio completo</a>'
+    else:
+        orig_link = ""
+
+    cuartos_s = "s" if c != "1" else ""
+    banos_s   = "s" if b != "1" else ""
+
+    html = """<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>{t} \xb7 Porto Flats</title>
+<title>""" + t + """ \xb7 Porto Flats</title>
 <style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh}}
-.header{{background:#87A286;padding:20px 16px;text-align:center}}
-.logo{{color:#fff;font-size:20px;font-weight:300;letter-spacing:5px;text-transform:uppercase}}
-.logo-sub{{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}}
-.greeting{{background:#E7D7C9;text-align:center;padding:10px 16px;font-size:14px;color:#5a4a3a}}
-.card{{background:#fff;border-radius:14px;margin:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.07)}}
-.badge{{display:inline-block;background:#E7D7C9;color:#3D3D3D;border-radius:20px;padding:4px 14px;font-size:12px;margin-bottom:12px}}
-h1{{font-size:24px;font-weight:400;line-height:1.3}}
-.location{{color:#87A286;font-size:13px;margin-top:6px}}
-.features{{display:flex;gap:16px;margin-top:16px;flex-wrap:wrap}}
-.feat{{display:flex;align-items:center;gap:6px;font-size:14px;color:#555}}
-.feat-icon{{font-size:18px}}
-.sec-title{{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;margin-bottom:12px}}
-.tags{{display:flex;flex-wrap:wrap;gap:8px}}
-.tag{{background:#EDE9E3;border-radius:20px;padding:5px 13px;font-size:13px;color:#555}}
-.pr-table{{background:#EDE9E3;border-radius:10px;padding:4px 14px}}
-.pr-row{{display:flex;justify-content:space-between;align-items:center;padding:10px 0;font-size:14px;border-bottom:1px solid rgba(0,0,0,.06)}}
-.pr-row:last-child{{border-bottom:none}}
-.pr-total{{font-weight:700;font-size:16px;color:#87A286;padding-top:12px;margin-top:4px;border-top:2px solid rgba(135,162,134,.3)!important;border-bottom:none!important}}
-.dates-box{{background:#EDE9E3;border-radius:10px;padding:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}}
-.date-item{{flex:1;min-width:90px}}
-.date-label{{display:block;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#87A286;margin-bottom:3px}}
-.date-val{{font-size:16px;font-weight:500}}
-.date-sep{{font-size:20px;color:#CDC6C3}}
-.date-noches{{width:100%;text-align:center;font-size:13px;color:#888;margin-top:6px}}
-.btn{{display:block;text-align:center;padding:14px;border-radius:10px;font-size:15px;text-decoration:none;margin-top:10px;font-weight:500;cursor:pointer;border:none;width:100%;font-family:inherit}}
-.btn-green{{background:#87A286;color:#fff}}
-.btn-pdf{{background:#3D3D3D;color:#fff;font-size:14px;padding:12px}}
-.btn-maps{{background:#4a90d9;color:#fff}}
-.btn-light{{background:#EDE9E3;color:#3D3D3D}}
-.maps-wrap{{border-radius:12px;overflow:hidden;margin-bottom:12px}}
-.policy{{padding:4px 0}}
-.pol-item{{font-size:13px;padding:7px 0;color:#555;border-bottom:1px solid #EDE9E3}}
-.pol-item:last-child{{border-bottom:none}}
-.footer{{text-align:center;padding:20px 16px 32px;color:#aaa;font-size:12px;line-height:1.7}}
-.gallery{{display:flex;overflow-x:auto;gap:10px;padding:14px 14px 4px;scrollbar-width:none;-ms-overflow-style:none}}
-.gallery::-webkit-scrollbar{{display:none}}
-.g-img{{height:220px;min-width:300px;max-width:340px;object-fit:cover;border-radius:12px;flex-shrink:0;background:#CDC6C3}}
-@media print{{
-  .np{{display:none!important}}
-  body{{background:#fff}}
-  .card{{box-shadow:none;border:1px solid #eee;margin:6px;page-break-inside:avoid}}
-  .header{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-  .pr-table,.dates-box{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-  .greeting{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh}
+.header{background:#87A286;padding:20px 16px;text-align:center}
+.logo{color:#fff;font-size:20px;font-weight:300;letter-spacing:5px;text-transform:uppercase}
+.logo-sub{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}
+.greeting{background:#E7D7C9;text-align:center;padding:10px 16px;font-size:14px;color:#5a4a3a}
+.card{background:#fff;border-radius:14px;margin:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.07)}
+.badge{display:inline-block;background:#E7D7C9;color:#3D3D3D;border-radius:20px;padding:4px 14px;font-size:12px;margin-bottom:12px}
+h1{font-size:24px;font-weight:400;line-height:1.3}
+.location{color:#87A286;font-size:13px;margin-top:6px}
+.features{display:flex;gap:16px;margin-top:16px;flex-wrap:wrap}
+.feat{display:flex;align-items:center;gap:6px;font-size:14px;color:#555}
+.feat-icon{font-size:18px}
+.sec-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;margin-bottom:12px}
+.tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{background:#EDE9E3;border-radius:20px;padding:5px 13px;font-size:13px;color:#555}
+.pr-table{background:#EDE9E3;border-radius:10px;padding:4px 14px}
+.pr-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;font-size:14px;border-bottom:1px solid rgba(0,0,0,.06)}
+.pr-row:last-child{border-bottom:none}
+.pr-total{font-weight:700;font-size:16px;color:#87A286;padding-top:12px;margin-top:4px;border-top:2px solid rgba(135,162,134,.3)!important;border-bottom:none!important}
+.dates-box{background:#EDE9E3;border-radius:10px;padding:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.date-item{flex:1;min-width:90px}
+.date-label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#87A286;margin-bottom:3px}
+.date-val{font-size:16px;font-weight:500}
+.date-sep{font-size:20px;color:#CDC6C3}
+.date-noches{width:100%;text-align:center;font-size:13px;color:#888;margin-top:6px}
+.btn{display:block;text-align:center;padding:14px;border-radius:10px;font-size:15px;text-decoration:none;margin-top:10px;font-weight:500;cursor:pointer;border:none;width:100%;font-family:inherit}
+.btn-green{background:#87A286;color:#fff}
+.btn-pdf{background:#3D3D3D;color:#fff;font-size:14px;padding:12px}
+.btn-maps{background:#4a90d9;color:#fff}
+.btn-light{background:#EDE9E3;color:#3D3D3D}
+.maps-wrap{border-radius:12px;overflow:hidden;margin-bottom:12px}
+.policy{padding:4px 0}
+.pol-item{font-size:13px;padding:7px 0;color:#555;border-bottom:1px solid #EDE9E3}
+.pol-item:last-child{border-bottom:none}
+.footer{text-align:center;padding:20px 16px 32px;color:#aaa;font-size:12px;line-height:1.7}
+.gallery{display:flex;overflow-x:auto;gap:10px;padding:14px 14px 4px;scrollbar-width:none;-ms-overflow-style:none}
+.gallery::-webkit-scrollbar{display:none}
+.g-img{height:220px;min-width:300px;max-width:340px;object-fit:cover;border-radius:12px;flex-shrink:0;background:#CDC6C3}
+@media print{
+  .np{display:none!important}
+  body{background:#fff}
+  .card{box-shadow:none;border:1px solid #eee;margin:6px;page-break-inside:avoid}
+  .header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .pr-table,.dates-box{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .greeting{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
 </style>
 </head>
 <body>
@@ -261,27 +284,27 @@ h1{{font-size:24px;font-weight:400;line-height:1.3}}
   <div class="logo">Porto Flats</div>
   <div class="logo-sub">Porto de Galinhas \xb7 Pernambuco \xb7 Brasil</div>
 </div>
-{greeting}
-{gallery_html}
+""" + greeting + """
+""" + gallery_html + """
 <div class="card">
-  <div class="badge">\U0001f4cd {d}</div>
-  <h1>{t}</h1>
+  <div class="badge">\U0001f4cd """ + d + """</div>
+  <h1>""" + t + """</h1>
   <div class="location">Porto de Galinhas \xb7 PE \xb7 Brasil</div>
   <div class="features">
-    <div class="feat"><span class="feat-icon">\U0001f6cf</span>{c} cuarto{"s" if c != "1" else ""}</div>
-    <div class="feat"><span class="feat-icon">\U0001f6bf</span>{b} ba\xf1o{"s" if b != "1" else ""}</div>
-    <div class="feat"><span class="feat-icon">\U0001f465</span>Hasta {h} personas</div>
+    <div class="feat"><span class="feat-icon">\U0001f6cf</span>""" + c + """ cuarto""" + cuartos_s + """</div>
+    <div class="feat"><span class="feat-icon">\U0001f6bf</span>""" + b + """ ba\xf1o""" + banos_s + """</div>
+    <div class="feat"><span class="feat-icon">\U0001f465</span>Hasta """ + h + """ personas</div>
   </div>
 </div>
-{dates_section}
-{price_section}
-{"<div class='card'><div class='sec-title'>Incluye</div><div class='tags'>" + amenidades_html + "</div></div>" if amenidades_list else ""}
-{maps_section}
-{pol_section}
+""" + dates_section + """
+""" + price_section + """
+""" + amenidades_section + """
+""" + maps_section + """
+""" + pol_section + """
 <div class="card np">
   <div class="sec-title">¿Te interesa? Confirm\xe1 tu reserva</div>
-  <a href="https://wa.me/{wa_num}?text=Hola!+Me+interesa+{t.replace(' ', '+')}" class="btn btn-green">\U0001f4ac Consultar por WhatsApp</a>
-  {"<a href='" + orig + "' class='btn btn-light' target='_blank'>🔗 Ver anuncio completo</a>" if orig else ""}
+  <a href="https://wa.me/""" + wa_num + """?text=Hola!+Me+interesa+""" + t.replace(' ', '+') + """" class="btn btn-green">\U0001f4ac Consultar por WhatsApp</a>
+  """ + orig_link + """
   <button class="btn btn-pdf np" onclick="window.print()" style="margin-top:10px">⬇️ Descargar como PDF</button>
 </div>
 <div class="footer np">
@@ -313,7 +336,6 @@ def generar_pdf():
         if not data:
             return jsonify({"error": "Body JSON requerido"}), 400
 
-        # Detectar formato por presencia de total_brl
         use_v2 = "total_brl" in data
 
         if use_v2:
@@ -321,7 +343,7 @@ def generar_pdf():
                         "noches", "total_brl"]
             missing = [f for f in required if f not in data]
             if missing:
-                return jsonify({"error": f"Faltan: {missing}"}), 400
+                return jsonify({"error": "Faltan: " + str(missing)}), 400
             if not data.get("fecha"):
                 data["fecha"] = datetime.now().strftime("%d/%m/%Y")
             data.setdefault("hora_checkin",  "14:00 hs")
@@ -342,13 +364,13 @@ def generar_pdf():
                         "checkin", "checkout", "noches", "personas", "total"]
             missing = [f for f in required if f not in data]
             if missing:
-                return jsonify({"error": f"Faltan: {missing}"}), 400
+                return jsonify({"error": "Faltan: " + str(missing)}), 400
             data.setdefault("ubicacion_desc", "Porto de Galinhas, PE, Brasil")
             data.setdefault("caracteristicas", [])
             data.setdefault("items_precio", [])
             data.setdefault("condiciones", [
                 "Reserva confirma con anticipo del 50% del valor total.",
-                "Saldo se abona 15 días antes del check-in.",
+                "Saldo se abona 15 d\xedas antes del check-in.",
                 "Pago: transferencia bancaria (Brasil) o consultar en pesos ARG."
             ])
             data.setdefault("ubicacion_link", "https://portoflats-my-site-1.wixsite.com/porto-flats")
@@ -368,7 +390,7 @@ def generar_pdf():
         os.unlink(tmp_path)
 
         pdf_b64  = base64.b64encode(pdf_bytes).decode("utf-8")
-        filename = f"Presupuesto_PortoFlats_{data['numero']}.pdf"
+        filename = "Presupuesto_PortoFlats_" + data["numero"] + ".pdf"
 
         return jsonify({"ok": True, "filename": filename,
                         "pdf_base64": pdf_b64, "size_bytes": len(pdf_bytes)})
@@ -442,7 +464,7 @@ def despachar():
                     "total_brl", "checkin", "checkout"]
         missing = [f for f in required if f not in data]
         if missing:
-            return jsonify({"error": f"Faltan: {missing}"}), 400
+            return jsonify({"error": "Faltan: " + str(missing)}), 400
 
         cliente     = data["cliente"]
         numero_wa   = str(data["numero_wa"])
@@ -464,67 +486,63 @@ def despachar():
         obs         = (data.get("observaciones", "") or "").strip()
         fotos       = [f for f in data.get("fotos", []) if f and str(f).strip()]
 
-        # ── Número de presupuesto ─────────────────────────────
         num_pres = data.get("numero_pres") or str(int(datetime.now().timestamp() * 1000))[-6:]
         fecha    = datetime.now().strftime("%d/%m/%Y")
 
-        # ── Mini-anuncio URL ──────────────────────────────────
         BASE_URL = os.environ.get("SERVICE_URL", "https://pf-pdf-service.bg4ga1.easypanel.host")
-        from urllib.parse import urlencode, quote
+        from urllib.parse import quote
 
         def ep(v):
             return quote(str(v) if v is not None else "", safe="")
 
         amenidades = ", ".join(caracteristicas)
         diaria_desc = (total_brl - limpieza) / noches if noches else 0
-        mini_params = {
-            "t": propiedad, "d": distancia,
-            "c": str(data.get("cuartos", 1)), "b": str(data.get("banos", 1)),
-            "h": str(personas), "a": amenidades,
-            "p": str(int(diaria_desc)), "l": str(int(limpieza)),
-            "ci": checkin, "co": checkout, "n": str(noches),
-        }
-        mini_url = BASE_URL + "/propiedad?" + "&".join(f"{k}={ep(v)}" for k, v in mini_params.items())
+        mini_params = [
+            ("t", propiedad), ("d", distancia),
+            ("c", str(data.get("cuartos", 1))), ("b", str(data.get("banos", 1))),
+            ("h", str(personas)), ("a", amenidades),
+            ("p", str(int(diaria_desc))), ("l", str(int(limpieza))),
+            ("ci", checkin), ("co", checkout), ("n", str(noches)),
+        ]
+        mini_url = BASE_URL + "/propiedad?" + "&".join(k + "=" + ep(v) for k, v in mini_params)
         for i, foto_url in enumerate(fotos[:10], 1):
-            mini_url += f"&f{i}={ep(foto_url)}"
+            mini_url += "&f" + str(i) + "=" + ep(foto_url)
 
         short_url = _tinyurl(mini_url)
 
-        # ── Mensaje WhatsApp ──────────────────────────────────
-        eW = "\U0001f44b"
-        ePF = "\U0001f3d6"
-        eCal = "\U0001f4c5"
+        eW    = "\U0001f44b"
+        ePF   = "\U0001f3d6"
+        eCal  = "\U0001f4c5"
         eMoon = "\U0001f319"
         eCasa = "\U0001f3e1"
-        eMoney = "\U0001f4b0"
-        eLink = "🔗"
-        DIV = "━" * 16
+        eMoney= "\U0001f4b0"
+        eLink = "\U0001f517"
+        DIV   = "━" * 16
 
         nombre_corto = cliente.split()[0].title() if cliente else "cliente"
-        feats_txt = "\n".join(f"• {f}" for f in caracteristicas[:8])
+        feats_txt = "\n".join("- " + f for f in caracteristicas[:8])
 
-        msg = f"{eW} Hola {nombre_corto}!\n\n"
-        msg += f"Somos *Porto Flats* {ePF}\n"
-        msg += f"Te enviamos tu presupuesto para Porto de Galinhas!\n\n"
-        msg += f"{eCal} Check-in:  *{checkin}* · desde las {hora_ci}\n"
-        msg += f"{eCal} Check-out: *{checkout}* · hasta las {hora_co}\n"
-        msg += f"{eMoon} *{noches} noches*\n\n"
-        msg += f"{DIV}\n\n"
-        msg += f"{eCasa} *{propiedad}*\n"
+        msg  = eW + " Hola " + nombre_corto + "!\n\n"
+        msg += "Somos *Porto Flats* " + ePF + "\n"
+        msg += "Te enviamos tu presupuesto para Porto de Galinhas!\n\n"
+        msg += eCal + " Check-in:  *" + checkin  + "* \xb7 desde las " + hora_ci  + "\n"
+        msg += eCal + " Check-out: *" + checkout + "* \xb7 hasta las " + hora_co  + "\n"
+        msg += eMoon + " *" + str(noches) + " noches*\n\n"
+        msg += DIV + "\n\n"
+        msg += eCasa + " *" + propiedad + "*\n"
         if distancia:
-            msg += f"★ {distancia}\n"
+            msg += "★ " + distancia + "\n"
         if feats_txt:
             msg += feats_txt + "\n"
-        msg += f"\n{eMoney} *Total: R$ {int(total_brl):,}*".replace(",", ".")
-        msg += f"\nAnticipo para confirmar: {anticipo}% del total\n\n"
-        msg += f"{DIV}\n\n"
-        msg += f"{eLink} Ver fotos y detalles:\n{short_url}\n\n"
+        msg += "\n" + eMoney + " *Total: R$ " + str("{:,}".format(int(total_brl))).replace(",", ".") + "*"
+        msg += "\nAnticipo para confirmar: " + str(anticipo) + "% del total\n\n"
+        msg += DIV + "\n\n"
+        msg += eLink + " Ver fotos y detalles:\n" + short_url + "\n\n"
         if obs:
-            msg += f"ℹ️ {obs}\n\n"
-        msg += f"Cualquier consulta, estamos a disposición!\n"
-        msg += f"*Porto Flats* {ePF}"
+            msg += "ℹ️ " + obs + "\n\n"
+        msg += "Cualquier consulta, estamos a disposici\xf3n!\n"
+        msg += "*Porto Flats* " + ePF
 
-        # ── Generar PDF ───────────────────────────────────────
         pdf_data = {
             "numero":       num_pres,
             "fecha":        fecha,
@@ -560,19 +578,19 @@ def despachar():
             pdf_bytes = f.read()
         os.unlink(tmp_path)
         pdf_b64  = base64.b64encode(pdf_bytes).decode("utf-8")
-        filename = f"Presupuesto_PortoFlats_{num_pres}.pdf"
+        filename = "Presupuesto_PortoFlats_" + num_pres + ".pdf"
 
-        # ── Enviar WhatsApp ───────────────────────────────────
         _evo_send_text(numero_wa, msg)
         _evo_send_pdf(numero_wa, pdf_b64, filename)
 
-        # ── Notificar a Marcelo ───────────────────────────────
-        confirmacion = (f"✅ Presupuesto enviado a *{nombre_corto}* ({numero_wa})\n"
-                        f"Total: R$ {int(total_brl):,} · {noches} noches\n"
-                        f"Propiedad: {propiedad}").replace(",", ".")
+        confirmacion = (
+            "✅ Presupuesto enviado a *" + nombre_corto + "* (" + numero_wa + ")\n"
+            "Total: R$ " + str("{:,}".format(int(total_brl))).replace(",", ".") +
+            " \xb7 " + str(noches) + " noches\n"
+            "Propiedad: " + propiedad
+        )
         _evo_send_text(MARCELO_NUM, confirmacion)
 
-        # ── Actualizar Sheets vía n8n (si está configurado) ───
         if N8N_STATUS_WH:
             try:
                 http.post(N8N_STATUS_WH, json={
@@ -638,55 +656,61 @@ def panel():
     pre_limpieza    = str(int(round(limpeza_raw)))                  if limpeza_raw else ""
 
     feats = []
-    if opt.get("quartos"):   feats.append(f"{opt['quartos']} cuarto(s)")
-    if opt.get("banheiros"): feats.append(f"{opt['banheiros']} baño(s)")
-    if opt.get("hospedes"):  feats.append(f"Hasta {opt['hospedes']} personas")
+    if opt.get("quartos"):   feats.append(str(opt["quartos"]) + " cuarto(s)")
+    if opt.get("banheiros"): feats.append(str(opt["banheiros"]) + " ba\xf1o(s)")
+    if opt.get("hospedes"):  feats.append("Hasta " + str(opt["hospedes"]) + " personas")
     if opt.get("amenidades"):
         feats += [x.strip() for x in str(opt["amenidades"]).split(",") if x.strip()]
     pre_caracteristicas = "\n".join(feats)
 
-    html = f"""<!DOCTYPE html>
+    foto_inputs = "".join(
+        '<div class="foto-field"><span class="foto-num">' + str(i) + '</span>'
+        '<input id="f' + str(i) + '" type="url" placeholder="https://..."></div>'
+        for i in range(1, 11)
+    )
+
+    html = """<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Panel de Revisión · Porto Flats</title>
+<title>Panel de Revisión \xb7 Porto Flats</title>
 <style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh}}
-.header{{background:#87A286;padding:18px 16px;text-align:center}}
-.logo{{color:#fff;font-size:18px;font-weight:300;letter-spacing:5px}}
-.logo-sub{{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}}
-.card{{background:#fff;border-radius:14px;margin:14px;padding:20px;box-shadow:0 2px 14px rgba(0,0,0,.07)}}
-h2{{font-size:13px;font-weight:700;color:#87A286;margin-bottom:14px;text-transform:uppercase;letter-spacing:1px}}
-.field{{margin-bottom:12px}}
-label{{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:#87A286;margin-bottom:4px}}
-input,select,textarea{{width:100%;padding:10px 12px;border:1.5px solid #CDC6C3;border-radius:9px;font-size:15px;color:#3D3D3D;background:#fff;outline:none;font-family:inherit}}
-input:focus,select:focus,textarea:focus{{border-color:#87A286}}
-textarea{{resize:vertical;min-height:70px;line-height:1.5}}
-.row{{display:flex;gap:10px}}
-.row .field{{flex:1;min-width:0}}
-.calc-box{{background:#EDE9E3;border-radius:10px;padding:14px;margin-bottom:12px}}
-.calc-row{{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:14px}}
-.calc-row:last-child{{margin-bottom:0}}
-.calc-label{{color:#555}}
-.calc-val{{font-weight:600;color:#3D3D3D}}
-.strike{{text-decoration:line-through;color:#999;font-weight:400}}
-.calc-val.main{{color:#87A286;font-size:16px}}
-.fotos-toggle{{display:flex;align-items:center;gap:8px;cursor:pointer;color:#87A286;font-size:13px;font-weight:600;margin-bottom:0}}
-.fotos-toggle input[type=checkbox]{{width:18px;height:18px;cursor:pointer;accent-color:#87A286}}
-#fotos-section{{display:none;margin-top:12px}}
-#fotos-section.open{{display:block}}
-.foto-field{{display:flex;align-items:center;gap:8px;margin-bottom:8px}}
-.foto-num{{font-size:12px;color:#999;width:20px;flex-shrink:0;text-align:right}}
-.foto-field input{{margin-bottom:0}}
-.btn-enviar{{display:block;width:100%;padding:16px;background:#87A286;color:#fff;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;margin:8px 0;letter-spacing:.5px}}
-.btn-enviar:active{{background:#6d8b6c}}
-.btn-enviar:disabled{{background:#CDC6C3;cursor:not-allowed}}
-.msg-box{{text-align:center;padding:12px;font-size:14px;border-radius:10px;margin-top:8px;display:none}}
-.msg-ok{{background:#e8f5e9;color:#2e7d32}}
-.msg-err{{background:#ffebee;color:#c62828}}
-.tip{{font-size:11px;color:#999;margin-top:4px}}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh}
+.header{background:#87A286;padding:18px 16px;text-align:center}
+.logo{color:#fff;font-size:18px;font-weight:300;letter-spacing:5px}
+.logo-sub{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}
+.card{background:#fff;border-radius:14px;margin:14px;padding:20px;box-shadow:0 2px 14px rgba(0,0,0,.07)}
+h2{font-size:13px;font-weight:700;color:#87A286;margin-bottom:14px;text-transform:uppercase;letter-spacing:1px}
+.field{margin-bottom:12px}
+label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:#87A286;margin-bottom:4px}
+input,select,textarea{width:100%;padding:10px 12px;border:1.5px solid #CDC6C3;border-radius:9px;font-size:15px;color:#3D3D3D;background:#fff;outline:none;font-family:inherit}
+input:focus,select:focus,textarea:focus{border-color:#87A286}
+textarea{resize:vertical;min-height:70px;line-height:1.5}
+.row{display:flex;gap:10px}
+.row .field{flex:1;min-width:0}
+.calc-box{background:#EDE9E3;border-radius:10px;padding:14px;margin-bottom:12px}
+.calc-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:14px}
+.calc-row:last-child{margin-bottom:0}
+.calc-label{color:#555}
+.calc-val{font-weight:600;color:#3D3D3D}
+.strike{text-decoration:line-through;color:#999;font-weight:400}
+.calc-val.main{color:#87A286;font-size:16px}
+.fotos-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;color:#87A286;font-size:13px;font-weight:600;margin-bottom:0}
+.fotos-toggle input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:#87A286}
+#fotos-section{display:none;margin-top:12px}
+#fotos-section.open{display:block}
+.foto-field{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.foto-num{font-size:12px;color:#999;width:20px;flex-shrink:0;text-align:right}
+.foto-field input{margin-bottom:0}
+.btn-enviar{display:block;width:100%;padding:16px;background:#87A286;color:#fff;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;margin:8px 0;letter-spacing:.5px}
+.btn-enviar:active{background:#6d8b6c}
+.btn-enviar:disabled{background:#CDC6C3;cursor:not-allowed}
+.msg-box{text-align:center;padding:12px;font-size:14px;border-radius:10px;margin-top:8px;display:none}
+.msg-ok{background:#e8f5e9;color:#2e7d32}
+.msg-err{background:#ffebee;color:#c62828}
+.tip{font-size:11px;color:#999;margin-top:4px}
 </style>
 </head>
 <body>
@@ -700,11 +724,11 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
   <h2>\U0001f464 Cliente</h2>
   <div class="field">
     <label>Nombre completo</label>
-    <input id="cliente" value="{pre_cliente}" placeholder="MARIA DE LOS ANGELES ROLANDI" required>
+    <input id="cliente" value="__CLIENTE__" placeholder="MARIA DE LOS ANGELES ROLANDI" required>
   </div>
   <div class="field">
     <label>WhatsApp (con código de país)</label>
-    <input id="numero_wa" value="{pre_wa}" placeholder="5491112345678" required>
+    <input id="numero_wa" value="__WA__" placeholder="5491112345678" required>
     <p class="tip">Sin +, sin espacios. Ej: 5491112345678</p>
   </div>
 </div>
@@ -714,31 +738,31 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
   <h2>\U0001f3e1 Propiedad</h2>
   <div class="field">
     <label>Nombre de la propiedad</label>
-    <input id="propiedad" value="{pre_propiedad}" placeholder="Nixxus Premium" required>
+    <input id="propiedad" value="__PROPIEDAD__" placeholder="Nixxus Premium" required>
   </div>
   <div class="row">
     <div class="field">
       <label>Distancia al mar</label>
-      <input id="distancia" value="{pre_distancia}" placeholder="40m del mar">
+      <input id="distancia" value="__DISTANCIA__" placeholder="40m del mar">
     </div>
     <div class="field">
       <label>Personas</label>
-      <input id="personas" type="number" min="1" max="20" value="{pre_personas or 2}">
+      <input id="personas" type="number" min="1" max="20" value="__PERSONAS__">
     </div>
   </div>
   <div class="row">
     <div class="field">
       <label>Cuartos</label>
-      <input id="cuartos" type="number" min="0" max="10" value="{pre_cuartos or 1}">
+      <input id="cuartos" type="number" min="0" max="10" value="__CUARTOS__">
     </div>
     <div class="field">
-      <label>Baños</label>
-      <input id="banos" type="number" min="0" max="10" value="{pre_banos or 1}">
+      <label>Ba\xf1os</label>
+      <input id="banos" type="number" min="0" max="10" value="__BANOS__">
     </div>
   </div>
   <div class="field">
-    <label>Características (una por línea)</label>
-    <textarea id="caracteristicas" rows="5" placeholder="Estudio&#10;1 baño&#10;Aire acondicionado&#10;Wi-Fi&#10;Cocina equipada">{pre_caracteristicas}</textarea>
+    <label>Caracter\xedsticas (una por l\xednea)</label>
+    <textarea id="caracteristicas" rows="5" placeholder="Estudio&#10;1 ba\xf1o&#10;Aire acondicionado&#10;Wi-Fi&#10;Cocina equipada">__CARACTERISTICAS__</textarea>
   </div>
 </div>
 
@@ -748,11 +772,11 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
   <div class="row">
     <div class="field">
       <label>Check-in</label>
-      <input id="checkin" value="{pre_checkin}" placeholder="25/04/2025" required>
+      <input id="checkin" value="__CHECKIN__" placeholder="25/04/2025" required>
     </div>
     <div class="field">
       <label>Check-out</label>
-      <input id="checkout" value="{pre_checkout}" placeholder="05/05/2025" required>
+      <input id="checkout" value="__CHECKOUT__" placeholder="05/05/2025" required>
     </div>
   </div>
   <div class="row">
@@ -767,7 +791,7 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
   </div>
   <div class="field">
     <label>Noches</label>
-    <input id="noches" type="number" min="1" value="{pre_noches or 1}" oninput="recalc()" required>
+    <input id="noches" type="number" min="1" value="__NOCHES__" oninput="recalc()" required>
   </div>
 </div>
 
@@ -777,11 +801,11 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
   <div class="row">
     <div class="field">
       <label>Total R$ (editable)</label>
-      <input id="total_brl" type="number" min="0" step="10" value="{pre_total}" oninput="recalc()" placeholder="1800" required>
+      <input id="total_brl" type="number" min="0" step="10" value="__TOTAL__" oninput="recalc()" placeholder="1800" required>
     </div>
     <div class="field">
       <label>T.B. Limpieza R$</label>
-      <input id="limpieza_brl" type="number" min="0" step="10" value="{pre_limpieza or 0}" oninput="recalc()" placeholder="200">
+      <input id="limpieza_brl" type="number" min="0" step="10" value="__LIMPIEZA__" oninput="recalc()" placeholder="200">
     </div>
   </div>
   <div class="calc-box">
@@ -806,7 +830,7 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
     </datalist>
   </div>
   <div class="field">
-    <label>Traslado (dejar vacío si no aplica)</label>
+    <label>Traslado (dejar vac\xedo si no aplica)</label>
     <input id="traslado" placeholder="Incluido / R$ 80 ida y vuelta">
   </div>
   <div class="row">
@@ -839,8 +863,8 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
     \U0001f4f8 Agregar fotos (hasta 10 URLs)
   </label>
   <div id="fotos-section">
-    {''.join(f'<div class="foto-field"><span class="foto-num">{i}</span><input id="f{i}" type="url" placeholder="https://..."></div>' for i in range(1, 11))}
-    <p class="tip">Pegá URLs de Google Drive, Wix Media, Dropbox, etc.</p>
+    __FOTO_INPUTS__
+    <p class="tip">Peg\xe1 URLs de Google Drive, Wix Media, Dropbox, etc.</p>
   </div>
 </div>
 
@@ -853,11 +877,11 @@ textarea{{resize:vertical;min-height:70px;line-height:1.5}}
 </div>
 
 <!-- Campos ocultos de contexto -->
-<input type="hidden" id="row_number"  value="{pre_row_number}">
-<input type="hidden" id="rowTimestamp" value="{pre_timestamp}">
+<input type="hidden" id="row_number"  value="__ROW_NUMBER__">
+<input type="hidden" id="rowTimestamp" value="__TIMESTAMP__">
 
 <script>
-function recalc() {{
+function recalc() {
   const total  = parseFloat(document.getElementById('total_brl').value)  || 0;
   const limp   = parseFloat(document.getElementById('limpieza_brl').value) || 0;
   const noches = parseInt(document.getElementById('noches').value)        || 1;
@@ -867,14 +891,14 @@ function recalc() {{
   document.getElementById('diaria_reg').textContent  = fmt(dReg);
   document.getElementById('diaria_desc').textContent = fmt(dDesc);
   document.getElementById('total_disp').textContent  = fmt(total);
-}}
+}
 
-function toggleFotos() {{
+function toggleFotos() {
   const sec = document.getElementById('fotos-section');
   sec.classList.toggle('open', document.getElementById('fotos-chk').checked);
-}}
+}
 
-async function enviar() {{
+async function enviar() {
   const btn = document.getElementById('btn-enviar');
   const msgBox = document.getElementById('msg-box');
   btn.disabled = true;
@@ -885,12 +909,13 @@ async function enviar() {{
     .split('\\n').map(s => s.trim()).filter(Boolean);
 
   const fotos = [];
-  for (let i = 1; i <= 10; i++) {{
-    const v = (document.getElementById('f' + i) || {{}}).value || '';
+  for (let i = 1; i <= 10; i++) {
+    const el = document.getElementById('f' + i);
+    const v = el ? el.value : '';
     if (v.trim()) fotos.push(v.trim());
-  }}
+  }
 
-  const payload = {{
+  const payload = {
     cliente:      document.getElementById('cliente').value.trim(),
     numero_wa:    document.getElementById('numero_wa').value.trim(),
     propiedad:    document.getElementById('propiedad').value.trim(),
@@ -914,50 +939,66 @@ async function enviar() {{
     fotos:        fotos,
     row_number:   document.getElementById('row_number').value,
     rowTimestamp: document.getElementById('rowTimestamp').value,
-  }};
+  };
 
-  // Validaciones básicas
-  if (!payload.cliente || !payload.numero_wa || !payload.propiedad) {{
+  if (!payload.cliente || !payload.numero_wa || !payload.propiedad) {
     showMsg('Falta nombre, WhatsApp o propiedad.', false);
     btn.disabled = false; btn.textContent = '✅ Enviar al cliente'; return;
-  }}
-  if (payload.total_brl <= 0) {{
+  }
+  if (payload.total_brl <= 0) {
     showMsg('El total debe ser mayor a 0.', false);
     btn.disabled = false; btn.textContent = '✅ Enviar al cliente'; return;
-  }}
+  }
 
-  try {{
-    const r = await fetch('/despachar', {{
+  try {
+    const r = await fetch('/despachar', {
       method: 'POST',
-      headers: {{'Content-Type': 'application/json'}},
+      headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload)
-    }});
+    });
     const j = await r.json();
-    if (j.ok) {{
+    if (j.ok) {
       showMsg('✅ Enviado! Presupuesto N° ' + j.num_pres + ' — PDF + mensaje enviados al cliente.', true);
       btn.textContent = '✅ Enviado';
-    }} else {{
+    } else {
       showMsg('Error: ' + (j.error || 'desconocido'), false);
       btn.disabled = false; btn.textContent = '✅ Enviar al cliente';
-    }}
-  }} catch(e) {{
+    }
+  } catch(e) {
     showMsg('Error de red: ' + e.message, false);
     btn.disabled = false; btn.textContent = '✅ Enviar al cliente';
-  }}
-}}
+  }
+}
 
-function showMsg(text, ok) {{
+function showMsg(text, ok) {
   const b = document.getElementById('msg-box');
   b.textContent = text;
   b.className = 'msg-box ' + (ok ? 'msg-ok' : 'msg-err');
   b.style.display = 'block';
-}}
+}
 
-// Calcular al cargar si hay datos
 recalc();
 </script>
 </body>
 </html>"""
+    html = (html
+        .replace("__CLIENTE__", pre_cliente or "")
+        .replace("__WA__", pre_wa or "")
+        .replace("__PROPIEDAD__", pre_propiedad or "")
+        .replace("__DISTANCIA__", pre_distancia or "")
+        .replace("__PERSONAS__", pre_personas or "2")
+        .replace("__CUARTOS__", pre_cuartos or "1")
+        .replace("__BANOS__", pre_banos or "1")
+        .replace("__CARACTERISTICAS__", pre_caracteristicas or "")
+        .replace("__CHECKIN__", pre_checkin or "")
+        .replace("__CHECKOUT__", pre_checkout or "")
+        .replace("__NOCHES__", pre_noches or "1")
+        .replace("__TOTAL__", pre_total or "")
+        .replace("__LIMPIEZA__", pre_limpieza or "0")
+        .replace("__FOTO_INPUTS__", foto_inputs)
+        .replace("__ROW_NUMBER__", pre_row_number or "")
+        .replace("__TIMESTAMP__", pre_timestamp or "")
+    )
     return Response(html, mimetype="text/html; charset=utf-8")
 
 
@@ -970,7 +1011,7 @@ def recibo_form():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Generar Recibo · Porto Flats</title>
+<title>Generar Recibo \xb7 Porto Flats</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh}
@@ -1036,7 +1077,7 @@ input:focus,select:focus{border-color:#87A286}
         <option>Anticipo 50%</option>
         <option>Saldo 50%</option>
         <option>Pago total</option>
-        <option>Señal reserva</option>
+        <option>Se\xf1al reserva</option>
       </select>
     </div>
     <div class="row">
