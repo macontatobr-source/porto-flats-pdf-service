@@ -1149,6 +1149,733 @@ document.getElementById('f').onsubmit = async function(e) {
     return Response(html, mimetype="text/html; charset=utf-8")
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# NUEVO FLUJO: DASHBOARD → EDITAR → PROPUESTA MULTI-OPCIÓN
+# ══════════════════════════════════════════════════════════════════════════════
+import uuid as _uuid
+import time as _time
+import pathlib as _pathlib
+
+# ── Constantes Sheets / Uploads ───────────────────────────────────────────────
+SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "1p-wDJOc6axaZMs103Gu1w_9SmZXZ6Vq0Z1eXgU8tFtc")
+OPCIONES_SHEET = os.environ.get("OPCIONES_SHEET", "Opciones Pendientes")
+SERVICE_URL    = os.environ.get("SERVICE_URL", "https://pf-pdf-service.bg4ga1.easypanel.host")
+
+_UPL_DIR = _pathlib.Path(os.environ.get("UPLOADS_DIR", "/app/uploads"))
+try:
+    _UPL_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    _UPL_DIR = _pathlib.Path("/tmp/pf-uploads")
+    _UPL_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── Google Sheets helpers ─────────────────────────────────────────────────────
+def _sheets_client():
+    try:
+        import gspread
+        from google.oauth2.service_account import Credentials
+        SCOPES = ["https://www.googleapis.com/auth/spreadsheets",
+                  "https://www.googleapis.com/auth/drive.readonly"]
+        creds_b64 = os.environ.get("GOOGLE_CREDENTIALS_B64", "")
+        if creds_b64:
+            pad  = creds_b64 + "=" * (-len(creds_b64) % 4)
+            info = json.loads(base64.b64decode(pad))
+            creds = Credentials.from_service_account_info(info, scopes=SCOPES)
+        else:
+            key_path = _pathlib.Path(__file__).parent / "marcelo-ai-n8n-24231b999d6d.json"
+            creds = Credentials.from_service_account_file(str(key_path), scopes=SCOPES)
+        return gspread.authorize(creds)
+    except Exception as e:
+        print(f"[Sheets] client error: {e}")
+        return None
+
+
+def _sheets_get_row(row_number):
+    """Devuelve dict {header: value} para la fila indicada."""
+    try:
+        gc = _sheets_client()
+        if not gc:
+            return None
+        ws      = gc.open_by_key(SPREADSHEET_ID).worksheet(OPCIONES_SHEET)
+        headers = ws.row_values(1)
+        values  = ws.row_values(int(row_number))
+        return {h: (values[i] if i < len(values) else "") for i, h in enumerate(headers)}
+    except Exception as e:
+        print(f"[Sheets] get_row error: {e}")
+        return None
+
+
+def _sheets_update(row_number, col_name, value):
+    """Actualiza una celda por nombre de columna."""
+    try:
+        gc = _sheets_client()
+        if not gc:
+            return False
+        ws      = gc.open_by_key(SPREADSHEET_ID).worksheet(OPCIONES_SHEET)
+        headers = ws.row_values(1)
+        if col_name not in headers:
+            return False
+        col_idx = headers.index(col_name) + 1
+        ws.update_cell(int(row_number), col_idx, value)
+        return True
+    except Exception as e:
+        print(f"[Sheets] update error: {e}")
+        return False
+
+
+# ── Fotos: upload / serve / limpieza ─────────────────────────────────────────
+def _cleanup_old_photos(max_days=7):
+    cutoff = _time.time() - max_days * 86400
+    for f in _UPL_DIR.glob("*"):
+        if f.is_file() and f.stat().st_mtime < cutoff:
+            try:
+                f.unlink()
+            except Exception:
+                pass
+
+
+@app.route("/foto/<fname>")
+def serve_foto(fname):
+    from flask import send_from_directory
+    if not all(c.isalnum() or c in "-_." for c in fname):
+        return Response("", status=400)
+    return send_from_directory(str(_UPL_DIR), fname)
+
+
+@app.route("/upload-foto", methods=["POST"])
+def upload_foto():
+    """Recibe foto, la guarda en volumen y devuelve URL publica."""
+    _cleanup_old_photos()
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "No file"}), 400
+    ext = _pathlib.Path(f.filename).suffix.lower()
+    if ext not in {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}:
+        return jsonify({"error": "Tipo no permitido"}), 400
+    if ext in {".heic", ".heif"}:
+        ext = ".jpg"
+    fname = str(_uuid.uuid4())[:8] + ext
+    f.save(str(_UPL_DIR / fname))
+    return jsonify({"ok": True, "url": SERVICE_URL + "/foto/" + fname})
+
+
+# ── /dashboard ────────────────────────────────────────────────────────────────
+@app.route("/dashboard")
+def dashboard():
+    """Panel interno: cards con opciones para seleccionar y enviar."""
+    row = request.args.get("row", "")
+    if not row:
+        return Response("Falta ?row=N", status=400, mimetype="text/plain")
+    rd = _sheets_get_row(row)
+    if not rd:
+        return Response("Error leyendo Sheets.", status=500, mimetype="text/plain")
+    nombre = rd.get("nombre", "Cliente")
+    ci     = rd.get("fecha_entrada", "")
+    co     = rd.get("fecha_salida",  "")
+    noites = rd.get("noites", "")
+    try:
+        opciones = json.loads(rd.get("opciones_json", "[]") or "[]")
+    except Exception:
+        opciones = []
+    if not opciones:
+        return Response("No hay opciones en esta fila.", status=404, mimetype="text/plain")
+
+    def _card(i, opt):
+        nome      = opt.get("nome", opt.get("Title", "Opcion " + str(i+1)))
+        distancia = opt.get("distancia", "")
+        quartos   = opt.get("quartos",   opt.get("cuartos",   ""))
+        banheiros = opt.get("banheiros", opt.get("banos",     ""))
+        hospedes  = opt.get("hospedes",  opt.get("personas",  ""))
+        amenidades = opt.get("amenidades", "")
+        preco_raw = opt.get("preco_total", opt.get("total_brl", 0))
+        try:
+            pv = float(str(preco_raw).replace(",", ".") or 0)
+            preco_disp = "R$ " + str("{:,}".format(int(pv * 1.25))).replace(",", ".")
+        except Exception:
+            preco_disp = ""
+        fotos = []
+        for fi in range(1, 11):
+            u = opt.get("foto"+str(fi)+"_up","") or opt.get("foto"+str(fi),"") or opt.get("f"+str(fi),"")
+            if u: fotos.append(u)
+        thumb = ('<img src="'+fotos[0]+'" class="card-thumb" onerror="this.style.display=\'none\'">'
+                 if fotos else "")
+        fp = []
+        if quartos:   fp.append("\U0001f6cf " + str(quartos) + " cuarto" + ("s" if str(quartos)!="1" else ""))
+        if banheiros: fp.append("\U0001f6bf " + str(banheiros) + " bano" + ("s" if str(banheiros)!="1" else ""))
+        if hospedes:  fp.append("\U0001f465 hasta " + str(hospedes))
+        feats_str = " &nbsp;&middot;&nbsp; ".join(fp)
+        parts = [
+            '<div class="opt-card" id="card-'+str(i)+'">',
+            '<div class="card-top"><label class="chk-wrap">',
+            '<input type="checkbox" name="sel" value="'+str(i)+'" onchange="updateBtn()">',
+            '<span class="chk-txt">Incluir en propuesta</span></label>',
+            '<span class="opt-num">#'+str(i+1)+'</span></div>',
+            thumb,
+            '<div class="card-info"><div class="opt-name">'+nome+'</div>',
+            ('<div class="opt-loc">\U0001f4cd '+distancia+'</div>' if distancia else ""),
+            ('<div class="opt-feats">'+feats_str+'</div>' if feats_str else ""),
+            ('<div class="opt-amenids">'+amenidades+'</div>' if amenidades else ""),
+            ('<div class="opt-price">'+preco_disp+'</div>' if preco_disp else ""),
+            '</div>',
+            '<a href="/editar?row='+str(row)+'&idx='+str(i)+'" class="btn-editar">✏️ Editar propuesta</a>',
+            '</div>'
+        ]
+        return "".join(parts)
+
+    cards_html = "\n".join(_card(i, o) for i, o in enumerate(opciones))
+    rp = []
+    if nombre: rp.append(nombre)
+    if ci and co: rp.append(ci + " → " + co)
+    if noites: rp.append(noites + " noches")
+    resumen = " \xb7 ".join(rp)
+
+    css = """
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh;padding-bottom:90px}
+.header{background:#87A286;padding:18px 16px;text-align:center}
+.logo{color:#fff;font-size:18px;font-weight:300;letter-spacing:5px}
+.logo-sub{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}
+.subhead{background:#fff;padding:11px 16px;font-size:13px;color:#555;border-bottom:1px solid #EDE9E3;display:flex;justify-content:space-between}
+.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;padding:16px 16px 6px}
+.opt-card{background:#fff;border-radius:14px;margin:14px;box-shadow:0 2px 14px rgba(0,0,0,.07);overflow:hidden}
+.card-top{display:flex;justify-content:space-between;align-items:center;padding:13px 16px 10px}
+.chk-wrap{display:flex;align-items:center;gap:8px;cursor:pointer}
+.chk-wrap input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:#87A286}
+.chk-txt{font-size:14px;color:#555}
+.opt-num{font-size:12px;color:#CDC6C3;font-weight:700}
+.card-thumb{width:100%;height:200px;object-fit:cover;display:block}
+.card-info{padding:13px 16px}
+.opt-name{font-size:18px;font-weight:500;margin-bottom:4px}
+.opt-loc{font-size:13px;color:#87A286;margin-bottom:5px}
+.opt-feats{font-size:13px;color:#555;margin-bottom:5px}
+.opt-amenids{font-size:12px;color:#888;margin-bottom:5px;line-height:1.4}
+.opt-price{font-size:16px;font-weight:700;color:#87A286;margin-top:6px}
+.btn-editar{display:block;margin:0 16px 16px;padding:12px;background:#EDE9E3;color:#3D3D3D;border-radius:10px;text-align:center;text-decoration:none;font-size:14px;font-weight:500}
+.footer-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #EDE9E3;padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.08)}
+.btn-enviar{display:block;width:100%;padding:14px;background:#87A286;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer}
+.btn-enviar:disabled{background:#CDC6C3;cursor:not-allowed}
+.msg-box{text-align:center;padding:9px;font-size:13px;border-radius:8px;margin-top:8px;display:none}
+.msg-ok{background:#e8f5e9;color:#2e7d32}.msg-err{background:#ffebee;color:#c62828}
+"""
+    subhead_html = ("<div class='subhead'><span>"+resumen+"</span><span style='color:#87A286;font-size:12px'>fila "+str(row)+"</span></div>"
+                    if resumen else "")
+    html = (
+        "<!DOCTYPE html>\n<html lang='es'>\n<head>\n"
+        "<meta charset='UTF-8'>\n"
+        "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>\n"
+        "<title>Dashboard \xb7 Porto Flats</title>\n"
+        "<style>"+css+"</style>\n</head>\n<body>\n"
+        "<div class='header'><div class='logo'>PORTO FLATS</div>"
+        "<div class='logo-sub'>Panel de Revisi\xf3n \xb7 Opciones</div></div>\n"
+        + subhead_html + "\n"
+        "<div class='section-title'>Selecion\xe1 las opciones para enviar al cliente</div>\n"
+        + cards_html + "\n"
+        "<div class='footer-bar'>"
+        "<button class='btn-enviar' id='btn-enviar' disabled onclick='enviar()'>&#128228; Enviar propuesta al cliente</button>"
+        "<div class='msg-box' id='msg-box'></div></div>\n"
+        "<script>\n"
+        "function updateBtn(){document.getElementById('btn-enviar').disabled=document.querySelectorAll('input[name=sel]:checked').length===0;}\n"
+        "async function enviar(){\n"
+        "  const btn=document.getElementById('btn-enviar');\n"
+        "  const msgBox=document.getElementById('msg-box');\n"
+        "  const selected=[...document.querySelectorAll('input[name=sel]:checked')].map(x=>parseInt(x.value));\n"
+        "  btn.disabled=true;btn.textContent='Enviando…';msgBox.style.display='none';\n"
+        "  try{\n"
+        "    const r=await fetch('/enviar-propuesta',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({row:'"+str(row)+"',selected})});\n"
+        "    const j=await r.json();\n"
+        "    if(j.ok){msgBox.textContent='✅ Propuesta enviada! '+(j.url||'');msgBox.className='msg-box msg-ok';msgBox.style.display='block';btn.textContent='✅ Enviado';}\n"
+        "    else{msgBox.textContent='Error: '+(j.error||'desconocido');msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='&#128228; Enviar propuesta al cliente';}\n"
+        "  }catch(e){msgBox.textContent='Error de red: '+e.message;msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='&#128228; Enviar propuesta al cliente';}\n"
+        "}\n</script>\n</body>\n</html>"
+    )
+    return Response(html, mimetype="text/html; charset=utf-8")
+
+
+# ── /editar ───────────────────────────────────────────────────────────────────
+@app.route("/editar", methods=["GET", "POST"])
+def editar():
+    """Formulario para editar una opcion y subir fotos."""
+    row     = request.args.get("row", "") or request.form.get("row", "")
+    idx_str = request.args.get("idx", "0") or request.form.get("idx", "0")
+    try:
+        idx = int(idx_str)
+    except Exception:
+        idx = 0
+
+    if request.method == "POST":
+        rd = _sheets_get_row(row)
+        if not rd:
+            return jsonify({"error": "No se pudo leer Sheets"}), 500
+        try:
+            opciones = json.loads(rd.get("opciones_json", "[]") or "[]")
+        except Exception:
+            opciones = []
+        while len(opciones) <= idx:
+            opciones.append({})
+        opt = opciones[idx]
+        for field in ["nome", "distancia", "quartos", "banheiros", "hospedes",
+                      "amenidades", "preco_total", "taxa_limpeza", "mapa_url", "observaciones"]:
+            val = request.form.get(field)
+            if val is not None:
+                opt[field] = val
+        for fi in range(1, 11):
+            url   = request.form.get("foto"+str(fi)+"_up", "")
+            clear = request.form.get("foto"+str(fi)+"_clear", "")
+            if url:
+                opt["foto"+str(fi)+"_up"] = url
+            elif clear:
+                opt.pop("foto"+str(fi)+"_up", None)
+        opciones[idx] = opt
+        _sheets_update(row, "opciones_json", json.dumps(opciones, ensure_ascii=False))
+        from flask import redirect
+        return redirect("/dashboard?row=" + str(row))
+
+    # GET
+    rd = _sheets_get_row(row)
+    if not rd:
+        return Response("Error leyendo Sheets.", status=500, mimetype="text/plain")
+    try:
+        opciones = json.loads(rd.get("opciones_json", "[]") or "[]")
+    except Exception:
+        opciones = []
+    opt        = opciones[idx] if idx < len(opciones) else {}
+    nome       = opt.get("nome",        opt.get("Title", ""))
+    distancia  = opt.get("distancia",   "")
+    quartos    = opt.get("quartos",     "")
+    banheiros  = opt.get("banheiros",   "")
+    hospedes   = opt.get("hospedes",    "")
+    amenidades = opt.get("amenidades",  "")
+    preco      = opt.get("preco_total", "")
+    limpeza    = opt.get("taxa_limpeza","")
+    mapa_url   = opt.get("mapa_url",    "")
+    observ     = opt.get("observaciones","")
+
+    foto_rows = ""
+    for fi in range(1, 11):
+        existing = (opt.get("foto"+str(fi)+"_up","")
+                    or opt.get("foto"+str(fi),"")
+                    or opt.get("f"+str(fi),""))
+        si = str(fi)
+        if existing:
+            short = existing[:55] + ("..." if len(existing) > 55 else "")
+            foto_rows += (
+                "<div class='foto-row' id='fr-"+si+"'>"
+                "<img src='"+existing+"' class='foto-prev' onerror=\"this.style.display='none'\">"
+                "<div class='foto-info'><span class='foto-url'>"+short+"</span>"
+                "<button type='button' class='btn-rm' onclick='rmFoto("+si+")'>&#10005;</button></div>"
+                "<input type='hidden' name='foto"+si+"_up' id='furl_"+si+"' value='"+existing+"'>"
+                "<input type='hidden' name='foto"+si+"_clear' id='fclr_"+si+"' value=''></div>"
+            )
+        else:
+            foto_rows += (
+                "<div class='foto-row foto-empty' id='fr-"+si+"'>"
+                "<span class='foto-num'>"+si+"</span>"
+                "<label class='upload-lbl'>"
+                "<input type='file' accept='image/*' onchange='uploadFoto(this,"+si+")' style='display:none'>"
+                "&#128247; Foto "+si+"</label>"
+                "<span class='fstatus' id='fst-"+si+"'></span>"
+                "<input type='hidden' name='foto"+si+"_up' id='furl_"+si+"' value=''>"
+                "<input type='hidden' name='foto"+si+"_clear' id='fclr_"+si+"' value=''></div>"
+            )
+
+    css_ed = """
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh;padding-bottom:20px}
+.header{background:#87A286;padding:16px;text-align:center}
+.logo{color:#fff;font-size:17px;font-weight:300;letter-spacing:4px}
+.logo-sub{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:2px}
+.card{background:#fff;border-radius:14px;margin:14px;padding:20px;box-shadow:0 2px 14px rgba(0,0,0,.07)}
+h2{font-size:12px;font-weight:700;color:#87A286;margin-bottom:14px;text-transform:uppercase;letter-spacing:1px}
+.field{margin-bottom:12px}
+label.lbl{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:#87A286;margin-bottom:4px}
+input[type=text],input[type=number],input[type=url],textarea{width:100%;padding:10px 12px;border:1.5px solid #CDC6C3;border-radius:9px;font-size:15px;color:#3D3D3D;background:#fff;outline:none;font-family:inherit}
+input:focus,textarea:focus{border-color:#87A286}
+textarea{resize:vertical;min-height:60px}
+.row{display:flex;gap:10px}.row .field{flex:1;min-width:0}
+.foto-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #EDE9E3}
+.foto-row:last-child{border-bottom:none}
+.foto-prev{width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0}
+.foto-info{flex:1;min-width:0;display:flex;align-items:center;gap:8px}
+.foto-url{font-size:11px;color:#888;flex:1;word-break:break-all}
+.btn-rm{font-size:13px;color:#c62828;background:none;border:none;cursor:pointer;padding:2px 6px}
+.foto-num{width:22px;text-align:center;font-size:12px;color:#CDC6C3;font-weight:700;flex-shrink:0}
+.upload-lbl{flex:1;background:#EDE9E3;border-radius:8px;padding:9px 13px;font-size:14px;cursor:pointer;color:#555}
+.fstatus{font-size:12px;color:#87A286;min-width:28px;text-align:right}
+.btn-guardar{display:block;width:100%;padding:15px;background:#87A286;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;margin-top:4px}
+.btn-volver{display:block;text-align:center;padding:11px;color:#87A286;text-decoration:none;font-size:14px;margin:4px 14px}
+.tip{font-size:11px;color:#999;margin-top:4px}
+"""
+    html_ed = (
+        "<!DOCTYPE html>\n<html lang='es'>\n<head>\n"
+        "<meta charset='UTF-8'>\n"
+        "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>\n"
+        "<title>Editar Opci\xf3n \xb7 Porto Flats</title>\n"
+        "<style>"+css_ed+"</style>\n</head>\n<body>\n"
+        "<div class='header'><div class='logo'>PORTO FLATS</div>"
+        "<div class='logo-sub'>Editar Opci\xf3n #"+str(idx+1)+"</div></div>\n"
+        "<a href='/dashboard?row="+str(row)+"' class='btn-volver'>← Volver al dashboard</a>\n"
+        "<form method='POST' action='/editar?row="+str(row)+"&idx="+str(idx)+"'>\n"
+        "<input type='hidden' name='row' value='"+str(row)+"'>\n"
+        "<input type='hidden' name='idx' value='"+str(idx)+"'>\n"
+        "<div class='card'><h2>\U0001f3e0 Propiedad</h2>\n"
+        "<div class='field'><label class='lbl'>Nombre</label>"
+        "<input type='text' name='nome' value='"+nome+"' placeholder='Nixxus Premium'></div>\n"
+        "<div class='field'><label class='lbl'>Distancia / Ubicaci\xf3n</label>"
+        "<input type='text' name='distancia' value='"+distancia+"' placeholder='40m del mar'></div>\n"
+        "<div class='row'>"
+        "<div class='field'><label class='lbl'>Cuartos</label><input type='number' name='quartos' value='"+str(quartos)+"' min='0' max='20'></div>"
+        "<div class='field'><label class='lbl'>Ba\xf1os</label><input type='number' name='banheiros' value='"+str(banheiros)+"' min='0' max='20'></div>"
+        "<div class='field'><label class='lbl'>Personas</label><input type='number' name='hospedes' value='"+str(hospedes)+"' min='1' max='30'></div>"
+        "</div>\n"
+        "<div class='field'><label class='lbl'>Amenidades (separadas por coma)</label>"
+        "<textarea name='amenidades' rows='2' placeholder='Wi-Fi, A/C, Piscina'>"+amenidades+"</textarea></div>"
+        "</div>\n"
+        "<div class='card'><h2>\U0001f4b0 Precio</h2>\n"
+        "<div class='row'>"
+        "<div class='field'><label class='lbl'>Total R$</label>"
+        "<input type='number' name='preco_total' value='"+str(preco)+"' step='10' min='0' placeholder='2200'>"
+        "<p class='tip'>El margen se aplica al precio base al mostrar</p></div>"
+        "<div class='field'><label class='lbl'>Limpieza R$</label>"
+        "<input type='number' name='taxa_limpeza' value='"+str(limpeza)+"' step='10' min='0' placeholder='300'></div>"
+        "</div></div>\n"
+        "<div class='card'><h2>\U0001f4cd Mapa</h2>\n"
+        "<div class='field'><label class='lbl'>URL Google Maps</label>"
+        "<input type='url' name='mapa_url' value='"+mapa_url+"' placeholder='https://maps.google.com/...'></div>"
+        "</div>\n"
+        "<div class='card'><h2>\U0001f4dd Observaciones</h2>\n"
+        "<textarea name='observaciones' rows='3' placeholder='Incluye ropa de cama.'>"+observ+"</textarea>"
+        "</div>\n"
+        "<div class='card'><h2>\U0001f4f8 Fotos (se borran a los 7 d\xedas)</h2>\n"
+        + foto_rows +
+        "</div>\n"
+        "<div class='card'><button type='submit' class='btn-guardar'>\U0001f4be Guardar y volver al dashboard</button></div>\n"
+        "</form>\n"
+        "<script>\n"
+        "async function uploadFoto(input,fi){\n"
+        "  const st=document.getElementById('fst-'+fi);\n"
+        "  const ur=document.getElementById('furl_'+fi);\n"
+        "  const file=input.files[0];if(!file)return;\n"
+        "  st.textContent='…';\n"
+        "  const fd=new FormData();fd.append('file',file);\n"
+        "  try{\n"
+        "    const r=await fetch('/upload-foto',{method:'POST',body:fd});\n"
+        "    const j=await r.json();\n"
+        "    if(j.ok){ur.value=j.url;st.textContent='✅';\n"
+        "      const row=document.getElementById('fr-'+fi);\n"
+        "      const img=document.createElement('img');img.src=j.url;img.className='foto-prev';img.style.marginRight='8px';\n"
+        "      row.insertBefore(img,row.firstChild);\n"
+        "    }else{st.textContent='❌';}\n"
+        "  }catch(e){st.textContent='❌';}\n"
+        "}\n"
+        "function rmFoto(fi){\n"
+        "  const ur=document.getElementById('furl_'+fi);\n"
+        "  const cl=document.getElementById('fclr_'+fi);\n"
+        "  if(ur)ur.value='';if(cl)cl.value='1';\n"
+        "  document.getElementById('fr-'+fi).style.opacity='0.35';\n"
+        "}\n"
+        "</script>\n</body>\n</html>"
+    )
+    return Response(html_ed, mimetype="text/html; charset=utf-8")
+
+
+# ── /enviar-propuesta ─────────────────────────────────────────────────────────
+@app.route("/enviar-propuesta", methods=["POST"])
+def enviar_propuesta():
+    """Recibe {row, selected:[0,2]}, envia WhatsApp al cliente con link /propuesta."""
+    data     = request.get_json(force=True) or {}
+    row      = str(data.get("row", ""))
+    selected = data.get("selected", [])
+    if not row or not selected:
+        return jsonify({"error": "Faltan row o selected"}), 400
+    rd = _sheets_get_row(row)
+    if not rd:
+        return jsonify({"error": "Error leyendo Sheets"}), 500
+    nombre   = rd.get("nombre", "")
+    whatsapp = rd.get("whatsapp", "")
+    ci       = rd.get("fecha_entrada", "")
+    co       = rd.get("fecha_salida",  "")
+    noites   = rd.get("noites", "")
+    sel_str       = ",".join(str(x) for x in selected)
+    propuesta_url = SERVICE_URL + "/propuesta?row=" + row + "&sel=" + sel_str
+    short_url     = _tinyurl(propuesta_url)
+    nombre_corto  = nombre.split()[0].title() if nombre else "cliente"
+    eW = "\U0001f44b"; ePF = "\U0001f3d6"; eCal = "\U0001f4c5"
+    eMoon = "\U0001f319"; eLink = "\U0001f517"; DIV = "━" * 16
+    msg  = eW + " Hola " + nombre_corto + "!\n\n"
+    msg += "Somos *Porto Flats* " + ePF + "\n"
+    msg += "Preparamos tu propuesta personalizada para Porto de Galinhas!\n\n"
+    if ci:     msg += eCal + " Check-in:  *" + ci + "*\n"
+    if co:     msg += eCal + " Check-out: *" + co + "*\n"
+    if noites: msg += eMoon + " *" + str(noites) + " noches*\n"
+    msg += "\n" + DIV + "\n\n"
+    msg += eLink + " Ver opciones con fotos y detalles:\n" + short_url + "\n\n"
+    msg += "Entr\xe1 al link, eleg\xed la opci\xf3n que m\xe1s te guste y confirm\xe1nos.\n"
+    msg += "Cualquier consulta, estamos a disposici\xf3n!\n*Porto Flats* " + ePF
+    _evo_send_text(whatsapp, msg)
+    _sheets_update(row, "estado", "Enviado al cliente")
+    return jsonify({"ok": True, "url": short_url, "numero": whatsapp})
+
+
+# ── /propuesta ────────────────────────────────────────────────────────────────
+@app.route("/propuesta")
+def propuesta():
+    """Landing multi-opcion para el cliente. ?row=N&sel=0,1"""
+    from urllib.parse import quote as urlquote
+    row     = request.args.get("row", "")
+    sel_raw = request.args.get("sel", "")
+    if not row:
+        return Response("Falta ?row=N", status=400, mimetype="text/plain")
+    rd = _sheets_get_row(row)
+    if not rd:
+        return Response("No se pudo cargar la propuesta.", status=500, mimetype="text/plain")
+    nombre  = rd.get("nombre", "")
+    ci      = rd.get("fecha_entrada", "")
+    co      = rd.get("fecha_salida",  "")
+    noites  = rd.get("noites", "")
+    try:
+        all_opts = json.loads(rd.get("opciones_json", "[]") or "[]")
+    except Exception:
+        all_opts = []
+    if sel_raw:
+        try:
+            idxs = [int(x.strip()) for x in sel_raw.split(",") if x.strip().isdigit()]
+            opts = [(i, all_opts[i]) for i in idxs if i < len(all_opts)]
+        except Exception:
+            opts = list(enumerate(all_opts))
+    else:
+        opts = list(enumerate(all_opts))
+    if not opts:
+        return Response("No hay opciones para mostrar.", status=404, mimetype="text/plain")
+
+    def _section(disp_num, orig_idx, opt):
+        nome      = opt.get("nome",      opt.get("Title", "Opcion " + str(disp_num)))
+        distancia = opt.get("distancia", "")
+        quartos   = str(opt.get("quartos",   opt.get("cuartos",   "1")))
+        banheiros = str(opt.get("banheiros", opt.get("banos",     "1")))
+        hospedes  = str(opt.get("hospedes",  opt.get("personas",  "2")))
+        amenidades = opt.get("amenidades", "")
+        mapa_url   = opt.get("mapa_url",   "")
+        observ     = opt.get("observaciones","")
+        preco_raw  = opt.get("preco_total",  opt.get("total_brl", 0))
+        limpeza_raw = opt.get("taxa_limpeza", opt.get("limpieza_brl", 0))
+        try:
+            preco_v   = float(str(preco_raw).replace(",",".") or 0)
+            limpeza_v = float(str(limpeza_raw).replace(",",".") or 0)
+        except Exception:
+            preco_v = limpeza_v = 0
+        fotos = []
+        for fi in range(1, 11):
+            u = opt.get("foto"+str(fi)+"_up","") or opt.get("foto"+str(fi),"") or opt.get("f"+str(fi),"")
+            if u: fotos.append(u)
+        carousel = ""
+        if fotos:
+            imgs = "".join("<img src='"+f+"' class='car-img' loading='lazy' onerror=\"this.style.display='none'\">" for f in fotos)
+            carousel = "<div class='carousel'>"+imgs+"</div>"
+        cs = "s" if quartos != "1" else ""
+        bs = "s" if banheiros != "1" else ""
+        feats = ("<div class='feats'>"
+                 "<div class='feat'><span class='fi'>\U0001f6cf</span>"+quartos+" cuarto"+cs+"</div>"
+                 "<div class='feat'><span class='fi'>\U0001f6bf</span>"+banheiros+" ba\xf1o"+bs+"</div>"
+                 "<div class='feat'><span class='fi'>\U0001f465</span>Hasta "+hospedes+" personas</div>"
+                 "</div>")
+        amenids_html = ""
+        if amenidades:
+            alist = [x.strip() for x in amenidades.split(",") if x.strip()]
+            if alist:
+                tags = "".join("<span class='tag'>"+x+"</span>" for x in alist)
+                amenids_html = "<div class='card'><div class='sec-title'>Incluye</div><div class='tags'>"+tags+"</div></div>"
+        price_html = ""
+        if preco_v > 0:
+            rows_p = ""
+            if noites:
+                try:
+                    n = int(noites)
+                    diaria = (preco_v - limpeza_v) / n if n else preco_v
+                    rows_p += "<div class='pr-row'><span>\U0001f319 Precio por noche</span><span>R$ "+str(int(diaria))+"</span></div>"
+                    rows_p += "<div class='pr-row'><span>\U0001f4c5 Noches</span><span>\xd7 "+str(n)+"</span></div>"
+                except Exception:
+                    pass
+            if limpeza_v > 0:
+                rows_p += "<div class='pr-row'><span>\U0001f9f9 Limpieza</span><span>R$ "+str(int(limpeza_v))+"</span></div>"
+            rows_p += "<div class='pr-row pr-total'><span>\U0001f4b0 Total estimado</span><span>R$ "+str(int(preco_v))+"</span></div>"
+            price_html = "<div class='card'><div class='sec-title'>Precio estimado</div><div class='pr-table'>"+rows_p+"</div></div>"
+        map_html = ""
+        if mapa_url:
+            embed_url = (mapa_url + ("&" if "?" in mapa_url else "?") + "output=embed"
+                         if "google.com/maps" in mapa_url and "output=embed" not in mapa_url
+                         else mapa_url)
+            map_html = ("<div class='card np'><div class='sec-title'>\U0001f4cd Ubicaci\xf3n</div>"
+                        "<div class='maps-wrap'><iframe src='"+embed_url+"' width='100%' height='200' frameborder='0' "
+                        "style='border:0;border-radius:12px;display:block' allowfullscreen loading='lazy'></iframe></div>"
+                        "<a href='"+mapa_url+"' class='btn btn-maps' target='_blank'>\U0001f5fa Ver en Google Maps</a></div>")
+        else:
+            loc_q = urlquote(nome + ", Porto de Galinhas, Pernambuco, Brasil")
+            map_html = ("<div class='card np'><div class='sec-title'>\U0001f4cd Ubicaci\xf3n</div>"
+                        "<div class='maps-wrap'><iframe src='https://maps.google.com/maps?q="+loc_q+"&output=embed' "
+                        "width='100%' height='200' frameborder='0' style='border:0;border-radius:12px;display:block' "
+                        "allowfullscreen loading='lazy'></iframe></div></div>")
+        obs_html = ("<div class='card'><p style='font-size:13px;color:#555;line-height:1.6'>&#8505;&#65039; "+observ+"</p></div>"
+                    if observ else "")
+        elegir_html = ("<div class='card np'><div class='sec-title'>\xbfTe gusta esta opci\xf3n?</div>"
+                       "<label class='elegir-label' for='chk-"+str(orig_idx)+"'>"
+                       "<input type='checkbox' class='opt-chk' id='chk-"+str(orig_idx)+"' name='opts' "
+                       "value='"+str(orig_idx)+"' onchange='updateConfirm()'>"
+                       "<span class='elegir-txt'>\U0001f446 Elegir opci\xf3n "+str(disp_num)+": "+nome+"</span></label></div>")
+        return ("<div class='opt-section'>"
+                "<div class='opt-header'><div class='opt-badge'>Opci\xf3n "+str(disp_num)+"</div>"
+                "<div class='opt-title'>"+nome+"</div>"
+                + ("<div class='opt-dist'>\U0001f4cd "+distancia+"</div>" if distancia else "")
+                + "</div>"
+                + carousel
+                + "<div class='card'><div class='sec-title'>Caracter\xedsticas</div>"+feats+"</div>"
+                + amenids_html + price_html + map_html + obs_html + elegir_html
+                + "</div><div class='divider'></div>")
+
+    sections_html = "".join(_section(dn, oi, o) for dn, (oi, o) in enumerate(opts, 1))
+
+    info_parts = []
+    if ci and co: info_parts.append("\U0001f4c5 "+ci+" → "+co)
+    if noites:    info_parts.append("\U0001f319 "+noites+" noches")
+    if nombre:    info_parts.append("\U0001f464 "+nombre)
+    info_bar = " &nbsp;\xb7&nbsp; ".join(info_parts) if info_parts else ""
+    nombre_corto = nombre.split()[0].title() if nombre else ""
+    greeting = ("<div class='greeting'>Preparado especialmente para <strong>"+nombre_corto+"</strong> \U0001f30a</div>"
+                if nombre_corto else "")
+
+    css_p = """
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh;padding-bottom:110px}
+.header{background:#87A286;padding:20px 16px;text-align:center}
+.logo{color:#fff;font-size:20px;font-weight:300;letter-spacing:5px;text-transform:uppercase}
+.logo-sub{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}
+.greeting{background:#E7D7C9;text-align:center;padding:10px 16px;font-size:14px;color:#5a4a3a}
+.info-bar{background:#fff;padding:10px 16px;font-size:12px;color:#888;text-align:center;border-bottom:1px solid #EDE9E3}
+.opt-header{background:#87A286;padding:16px;color:#fff}
+.opt-badge{font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:.8;margin-bottom:4px}
+.opt-title{font-size:20px;font-weight:400;margin-bottom:2px}
+.opt-dist{font-size:13px;opacity:.8}
+.divider{height:6px;background:#EDE9E3;border-top:2px solid #CDC6C3;border-bottom:2px solid #CDC6C3}
+.card{background:#fff;border-radius:14px;margin:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.07)}
+.sec-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;margin-bottom:12px}
+.feats{display:flex;gap:16px;flex-wrap:wrap}
+.feat{display:flex;align-items:center;gap:6px;font-size:14px;color:#555}
+.fi{font-size:18px}
+.tags{display:flex;flex-wrap:wrap;gap:8px}
+.tag{background:#EDE9E3;border-radius:20px;padding:5px 13px;font-size:13px;color:#555}
+.pr-table{background:#EDE9E3;border-radius:10px;padding:4px 14px}
+.pr-row{display:flex;justify-content:space-between;padding:10px 0;font-size:14px;border-bottom:1px solid rgba(0,0,0,.06)}
+.pr-row:last-child{border-bottom:none}
+.pr-total{font-weight:700;font-size:16px;color:#87A286}
+.carousel{display:flex;overflow-x:auto;gap:10px;padding:14px 14px 4px;scrollbar-width:none;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+.carousel::-webkit-scrollbar{display:none}
+.car-img{height:240px;min-width:320px;max-width:360px;object-fit:cover;border-radius:12px;flex-shrink:0;scroll-snap-align:start;background:#CDC6C3}
+.maps-wrap{border-radius:12px;overflow:hidden;margin-bottom:12px}
+.btn{display:block;text-align:center;padding:14px;border-radius:10px;font-size:15px;text-decoration:none;margin-top:10px;font-weight:500;cursor:pointer;border:none;width:100%;font-family:inherit}
+.btn-maps{background:#4a90d9;color:#fff}
+.elegir-label{display:flex;align-items:center;gap:12px;cursor:pointer;padding:4px 0}
+.elegir-label input[type=checkbox]{width:22px;height:22px;cursor:pointer;accent-color:#87A286;flex-shrink:0}
+.elegir-txt{font-size:15px;font-weight:500}
+.cta-todas{text-align:center;padding:18px 16px 8px}
+.cta-todas label{display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer;font-size:15px;font-weight:500;color:#3D3D3D}
+.cta-todas input[type=checkbox]{width:20px;height:20px;accent-color:#87A286}
+.pol-card{background:#fff;border-radius:14px;margin:14px;padding:20px;box-shadow:0 2px 14px rgba(0,0,0,.07)}
+.pol-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;margin-bottom:10px}
+.pol-item{font-size:13px;padding:6px 0;color:#555;border-bottom:1px solid #EDE9E3}
+.pol-item:last-child{border-bottom:none}
+.footer-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #EDE9E3;padding:12px 16px;box-shadow:0 -4px 16px rgba(0,0,0,.08)}
+.btn-confirm{display:block;width:100%;padding:14px;background:#87A286;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer}
+.btn-confirm:disabled{background:#CDC6C3;cursor:not-allowed}
+.accept-txt{font-size:11px;color:#aaa;text-align:center;margin-top:6px;line-height:1.5;padding:0 8px}
+.msg-box{text-align:center;padding:8px;font-size:13px;border-radius:8px;margin-top:6px;display:none}
+.msg-ok{background:#e8f5e9;color:#2e7d32}.msg-err{background:#ffebee;color:#c62828}
+.footer{text-align:center;padding:20px 16px;color:#aaa;font-size:12px;line-height:1.7}
+@media print{.np{display:none!important}}
+"""
+    html_p = (
+        "<!DOCTYPE html>\n<html lang='es'>\n<head>\n"
+        "<meta charset='UTF-8'>\n"
+        "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>\n"
+        "<title>Tu Propuesta \xb7 Porto Flats</title>\n"
+        "<style>"+css_p+"</style>\n</head>\n<body>\n"
+        "<div class='header'><div class='logo'>Porto Flats</div>"
+        "<div class='logo-sub'>Porto de Galinhas \xb7 Pernambuco \xb7 Brasil</div></div>\n"
+        + greeting
+        + ("<div class='info-bar'>"+info_bar+"</div>\n" if info_bar else "")
+        + sections_html
+        + "<div class='cta-todas np'><label>"
+          "<input type='checkbox' id='chk-todas' onchange='toggleTodas()'>"
+          "<span>✨ \xa1Me interesan todas las opciones!</span></label></div>\n"
+        + "<div class='pol-card'><div class='pol-title'>Pol\xedtica de cancelaci\xf3n</div>"
+          "<div class='pol-item'>✅ Reserva confirmada con <strong>anticipo del 50%</strong></div>"
+          "<div class='pol-item'>\U0001f4c5 Saldo abonado <strong>15 d\xedas antes</strong> del check-in</div>"
+          "<div class='pol-item'>\U0001f504 Cancelaci\xf3n +30 d\xedas: reembolso del anticipo (menos tasas)</div>"
+          "<div class='pol-item'>❌ Cancelaci\xf3n -30 d\xedas: sin reembolso</div>"
+          "<div class='pol-item'>\U0001f4b3 Pago: transferencia bancaria o PIX</div></div>\n"
+        + "<div class='footer-bar np'>"
+          "<button class='btn-confirm' id='btn-confirm' disabled onclick='confirmar()'>"
+          "✅ Confirmar selecci\xf3n</button>"
+          "<div class='accept-txt'>Al confirmar acept\xe1s nuestra pol\xedtica de cancelaci\xf3n.</div>"
+          "<div class='msg-box' id='msg-box'></div></div>\n"
+        + "<div class='footer np'>Porto Flats \xb7 Alquileres temporarios<br>"
+          "Porto de Galinhas \xb7 Pernambuco \xb7 Brasil<br>"
+          "<small>Esta propuesta fue preparada especialmente para vos</small></div>\n"
+        + "<script>\nconst ROW='"+str(row)+"';\n"
+          "function updateConfirm(){const any=document.querySelectorAll('.opt-chk:checked,#chk-todas:checked').length>0;document.getElementById('btn-confirm').disabled=!any;}\n"
+          "function toggleTodas(){const v=document.getElementById('chk-todas').checked;document.querySelectorAll('.opt-chk').forEach(c=>{c.checked=v;});updateConfirm();}\n"
+          "async function confirmar(){\n"
+          "  const btn=document.getElementById('btn-confirm');\n"
+          "  const msgBox=document.getElementById('msg-box');\n"
+          "  const todas=document.getElementById('chk-todas').checked;\n"
+          "  const opts=todas?[...document.querySelectorAll('.opt-chk')].map(c=>parseInt(c.value)):[...document.querySelectorAll('.opt-chk:checked')].map(c=>parseInt(c.value));\n"
+          "  if(!opts.length)return;\n"
+          "  btn.disabled=true;btn.textContent='Confirmando…';msgBox.style.display='none';\n"
+          "  try{\n"
+          "    const r=await fetch('/confirmar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({row:ROW,opciones_elegidas:opts})});\n"
+          "    const j=await r.json();\n"
+          "    if(j.ok){btn.textContent='✅ \xa1Confirmado!';msgBox.textContent='\xa1Muchas gracias! Te contactamos a la brevedad.';msgBox.className='msg-box msg-ok';msgBox.style.display='block';}\n"
+          "    else{msgBox.textContent='Error: '+(j.error||'intent\xe1 de nuevo');msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='✅ Confirmar selecci\xf3n';}\n"
+          "  }catch(e){msgBox.textContent='Error de red. Contact\xe1nos por WhatsApp.';msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='✅ Confirmar selecci\xf3n';}\n"
+          "}\n</script>\n</body>\n</html>"
+    )
+    return Response(html_p, mimetype="text/html; charset=utf-8")
+
+
+# ── /confirmar ────────────────────────────────────────────────────────────────
+@app.route("/confirmar", methods=["POST"])
+def confirmar():
+    """Cliente confirma opciones -> WhatsApp a Marcelo."""
+    data          = request.get_json(force=True) or {}
+    row           = str(data.get("row", ""))
+    opciones_eleg = data.get("opciones_elegidas", [])
+    if not row:
+        return jsonify({"error": "Falta row"}), 400
+    rd = _sheets_get_row(row)
+    nombre = rd.get("nombre", "") if rd else ""
+    try:
+        all_opts = json.loads(rd.get("opciones_json", "[]") or "[]") if rd else []
+    except Exception:
+        all_opts = []
+    nombres_eleg = []
+    for i in opciones_eleg:
+        try:
+            opt = all_opts[int(i)]
+            nombres_eleg.append(opt.get("nome", opt.get("Title", "opcion " + str(int(i)+1))))
+        except Exception:
+            nombres_eleg.append("opcion " + str(int(i)+1))
+    nombre_corto = nombre.split()[0].title() if nombre else "el cliente"
+    if len(nombres_eleg) == 1:
+        opts_txt = "*" + nombres_eleg[0] + "*"
+    elif len(nombres_eleg) == 2:
+        opts_txt = "*" + nombres_eleg[0] + "* y *" + nombres_eleg[1] + "*"
+    else:
+        opts_txt = ", ".join("*"+n+"*" for n in nombres_eleg[:-1]) + " y *" + nombres_eleg[-1] + "*"
+    msg = ("✅ *" + nombre_corto + "* eligi\xf3 su opci\xf3n de Porto de Galinhas!\n\n"
+           "Le gust\xf3: " + opts_txt + "\n\n"
+           "Fila Sheets #" + row + " \xb7 Contact\xe1lo para confirmar la reserva.")
+    _evo_send_text(MARCELO_NUM, msg)
+    _sheets_update(row, "estado", "Cliente confirmo")
+    return jsonify({"ok": True})
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
