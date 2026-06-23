@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Porto Flats â Servicio PDF + Mini-anuncio + Panel de RevisiÃ³n
+Porto Flats — Servicio PDF + Mini-anuncio + Panel de Revisión
 Flask service para n8n + WhatsApp automation
 """
 import base64
@@ -17,7 +17,7 @@ from build_recibo import draw_recibo
 
 app = Flask(__name__)
 
-# ââ Evolution API ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── Evolution API ────────────────────────────────────────────────────────────
 EVO_URL  = os.environ.get("EVOLUTION_API_URL",  "https://pf-evolution-api.bg4ga1.easypanel.host")
 EVO_KEY  = os.environ.get("EVOLUTION_API_KEY",  "F08BB21DEC16-4D00-B400-B16F5CC98731")
 EVO_INST = os.environ.get("EVOLUTION_INSTANCE", "Porto Flats")
@@ -45,7 +45,7 @@ def _evo_send_pdf(numero, pdf_b64, filename, caption=""):
             "mediatype": "document",
             "media": pdf_b64,
             "fileName": filename,
-            "caption": caption or "\U0001f4c4 Tu presupuesto Porto Flats. Â¡Estamos a disposiciÃ³n!"
+            "caption": caption or "\U0001f4c4 Tu presupuesto Porto Flats. ¡Estamos a disposición!"
         }, headers=_evo_headers(), timeout=45)
     except Exception as e:
         print(f"[EVO pdf error] {e}")
@@ -58,17 +58,17 @@ def _tinyurl(url):
         return url
 
 
-# ââ /health ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /health ──────────────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "service": "porto-flats-pdf"})
 
 
-# ââ /propiedad ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /propiedad ────────────────────────────────────────────────────────────────
 @app.route("/propiedad", methods=["GET"])
 def propiedad_page():
     """
-    Propuesta completa para el cliente: fotos, detalles, precios, mapa, polÃ­tica.
+    Propuesta completa para el cliente: fotos, detalles, precios, mapa, política.
     Params: t, d, c, b, h, a, p, l, m, o, ci, co, n, nr, pol, f1..f10
     """
     from urllib.parse import quote as urlquote
@@ -86,10 +86,10 @@ def propiedad_page():
     co   = request.args.get("co", "")
     n    = request.args.get("n", "")
     nr   = request.args.get("nr", "")   # nombre cliente
-    pol  = request.args.get("pol", "")  # URL polÃ­tica de cancelaciÃ³n
+    pol  = request.args.get("pol", "")  # URL política de cancelación
     wa_num = WA_NUM
 
-    # ââ Fotos ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── Fotos ────────────────────────────────────────────────────────────────
     fotos_list = [request.args.get(f"f{i}", "") for i in range(1, 11)]
     fotos_list = [f for f in fotos_list if f]
     gallery_html = ""
@@ -100,11 +100,11 @@ def propiedad_page():
         )
         gallery_html = '<div class="gallery np">' + imgs + '</div>'
 
-    # ââ Amenidades âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── Amenidades ───────────────────────────────────────────────────────────
     amenidades_list = [x.strip() for x in a.split(",") if x.strip()] if a else []
     amenidades_html = "".join('<span class="tag">' + x + '</span>' for x in amenidades_list)
 
-    # ââ Precios ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── Precios ──────────────────────────────────────────────────────────────
     try:
         p_num   = float(str(p).replace(",", "."))   if p   else 0
         lim_num = float(str(lim).replace(",", ".")) if lim else 0
@@ -134,7 +134,7 @@ def propiedad_page():
     else:
         price_section = ""
 
-    # ââ Fechas âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── Fechas ───────────────────────────────────────────────────────────────
     dates_section = ""
     if ci or co:
         noches_div = ('<div class="date-noches">' + noches_label + '</div>') if noches_label else ""
@@ -142,15 +142,15 @@ def propiedad_page():
             '<div class="card">'
             '<div class="sec-title">Tus fechas</div>'
             '<div class="dates-box">'
-            '<div class="date-item"><span class="date-label">Check-in</span><span class="date-val">' + (ci or "â") + '</span></div>'
-            '<div class="date-sep">â</div>'
-            '<div class="date-item"><span class="date-label">Check-out</span><span class="date-val">' + (co or "â") + '</span></div>'
+            '<div class="date-item"><span class="date-label">Check-in</span><span class="date-val">' + (ci or "—") + '</span></div>'
+            '<div class="date-sep">→</div>'
+            '<div class="date-item"><span class="date-label">Check-out</span><span class="date-val">' + (co or "—") + '</span></div>'
             + noches_div +
             '</div>'
             '</div>'
         )
 
-    # ââ Google Maps embed âââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── Google Maps embed ─────────────────────────────────────────────────────
     maps_section = ""
     if m:
         if "google.com/maps" in m and "output=embed" not in m:
@@ -182,7 +182,7 @@ def propiedad_page():
             'allowfullscreen loading="lazy"></iframe></div></div>'
         )
 
-    # ââ PolÃ­tica de cancelaciÃ³n âââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── Política de cancelación ───────────────────────────────────────────────
     if pol:
         pol_section = (
             '<div class="card"><div class="sec-title">Pol\xedtica de cancelaci\xf3n</div>'
@@ -193,28 +193,28 @@ def propiedad_page():
             '<div class="card">'
             '<div class="sec-title">Pol\xedtica de cancelaci\xf3n</div>'
             '<div class="policy">'
-            '<div class="pol-item">â Reserva confirmada con <strong>anticipo del 50%</strong></div>'
+            '<div class="pol-item">✅ Reserva confirmada con <strong>anticipo del 50%</strong></div>'
             '<div class="pol-item">\U0001f4c5 Saldo abonado <strong>15 d\xedas antes</strong> del check-in</div>'
             '<div class="pol-item">\U0001f504 Cancelaci\xf3n +30 d\xedas: reembolso del anticipo (menos tasas)</div>'
-            '<div class="pol-item">â Cancelaci\xf3n -30 d\xedas: sin reembolso</div>'
+            '<div class="pol-item">❌ Cancelaci\xf3n -30 d\xedas: sin reembolso</div>'
             '<div class="pol-item">\U0001f4b3 Pago: transferencia bancaria o PIX</div>'
             '</div>'
             '</div>'
         )
 
-    # ââ Saludo cliente ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── Saludo cliente ────────────────────────────────────────────────────────
     if nr:
         greeting = '<div class="greeting">Preparado especialmente para <strong>' + nr + '</strong> \U0001f30a</div>'
     else:
         greeting = ""
 
-    # ââ Amenidades section âââââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── Amenidades section ───────────────────────────────────────────────────
     if amenidades_list:
         amenidades_section = '<div class="card"><div class="sec-title">Incluye</div><div class="tags">' + amenidades_html + '</div></div>'
     else:
         amenidades_section = ""
 
-    # ââ Ver anuncio link âââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    # ── Ver anuncio link ─────────────────────────────────────────────────────
     if orig:
         orig_link = '<a href="' + orig + '" class="btn btn-light" target="_blank">\U0001f517 Ver anuncio completo</a>'
     else:
@@ -302,10 +302,10 @@ h1{font-size:24px;font-weight:400;line-height:1.3}
 """ + maps_section + """
 """ + pol_section + """
 <div class="card np">
-  <div class="sec-title">Â¿Te interesa? Confirm\xe1 tu reserva</div>
+  <div class="sec-title">¿Te interesa? Confirm\xe1 tu reserva</div>
   <a href="https://wa.me/""" + wa_num + """?text=Hola!+Me+interesa+""" + t.replace(' ', '+') + """" class="btn btn-green">\U0001f4ac Consultar por WhatsApp</a>
   """ + orig_link + """
-  <button class="btn btn-pdf np" onclick="window.print()" style="margin-top:10px">â¬ï¸ Descargar como PDF</button>
+  <button class="btn btn-pdf np" onclick="window.print()" style="margin-top:10px">⬇️ Descargar como PDF</button>
 </div>
 <div class="footer np">
   Porto Flats \xb7 Alquileres temporarios<br>
@@ -314,10 +314,10 @@ h1{font-size:24px;font-weight:400;line-height:1.3}
 </div>
 </body>
 </html>"""
-    return Response(html, mimetype="text/html; charset=utf-8")
+    return Response(html.encode('utf-8'), content_type="text/html; charset=utf-8")
 
 
-# ââ /generar-pdf âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /generar-pdf ─────────────────────────────────────────────────────────────
 @app.route("/generar-pdf", methods=["POST"])
 def generar_pdf():
     """
@@ -399,7 +399,7 @@ def generar_pdf():
         return jsonify({"error": str(e)}), 500
 
 
-# ââ /generar-recibo âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /generar-recibo ───────────────────────────────────────────────────────────
 @app.route("/generar-recibo", methods=["POST"])
 def generar_recibo():
     """
@@ -445,11 +445,11 @@ def generar_recibo():
         return jsonify({"error": str(e)}), 500
 
 
-# ââ /despachar ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /despachar ────────────────────────────────────────────────────────────────
 @app.route("/despachar", methods=["POST"])
 def despachar():
     """
-    Recibe datos editados del Panel, genera PDF y envÃ­a WhatsApp al cliente.
+    Recibe datos editados del Panel, genera PDF y envía WhatsApp al cliente.
     Body JSON: cliente, numero_wa, propiedad, personas, checkin, hora_checkin,
                checkout, hora_checkout, noches, distancia, caracteristicas[],
                total_brl, limpieza_brl, cochera, traslado, forma_pago,
@@ -517,7 +517,7 @@ def despachar():
         eCasa = "\U0001f3e1"
         eMoney= "\U0001f4b0"
         eLink = "\U0001f517"
-        DIV   = "â" * 16
+        DIV   = "━" * 16
 
         nombre_corto = cliente.split()[0].title() if cliente else "cliente"
         feats_txt = "\n".join("- " + f for f in caracteristicas[:8])
@@ -531,7 +531,7 @@ def despachar():
         msg += DIV + "\n\n"
         msg += eCasa + " *" + propiedad + "*\n"
         if distancia:
-            msg += "â " + distancia + "\n"
+            msg += "★ " + distancia + "\n"
         if feats_txt:
             msg += feats_txt + "\n"
         msg += "\n" + eMoney + " *Total: R$ " + str("{:,}".format(int(total_brl))).replace(",", ".") + "*"
@@ -539,7 +539,7 @@ def despachar():
         msg += DIV + "\n\n"
         msg += eLink + " Ver fotos y detalles:\n" + short_url + "\n\n"
         if obs:
-            msg += "â¹ï¸ " + obs + "\n\n"
+            msg += "ℹ️ " + obs + "\n\n"
         msg += "Cualquier consulta, estamos a disposici\xf3n!\n"
         msg += "*Porto Flats* " + ePF
 
@@ -584,7 +584,7 @@ def despachar():
         _evo_send_pdf(numero_wa, pdf_b64, filename)
 
         confirmacion = (
-            "â Presupuesto enviado a *" + nombre_corto + "* (" + numero_wa + ")\n"
+            "✅ Presupuesto enviado a *" + nombre_corto + "* (" + numero_wa + ")\n"
             "Total: R$ " + str("{:,}".format(int(total_brl))).replace(",", ".") +
             " \xb7 " + str(noches) + " noches\n"
             "Propiedad: " + propiedad
@@ -614,12 +614,12 @@ def despachar():
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 
-# ââ /panel ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /panel ────────────────────────────────────────────────────────────────────
 @app.route("/panel", methods=["GET"])
 def panel():
     """
-    Panel de RevisiÃ³n para que Marcelo edite y apruebe antes de enviar.
-    ParÃ¡metro opcional: ?d=BASE64_JSON con datos pre-cargados desde WF01.
+    Panel de Revisión para que Marcelo edite y apruebe antes de enviar.
+    Parámetro opcional: ?d=BASE64_JSON con datos pre-cargados desde WF01.
     """
     d_param = request.args.get("d", "")
     pdata = {}
@@ -674,7 +674,7 @@ def panel():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Panel de RevisiÃ³n \xb7 Porto Flats</title>
+<title>Panel de Revisión \xb7 Porto Flats</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh}
@@ -716,7 +716,7 @@ textarea{resize:vertical;min-height:70px;line-height:1.5}
 <body>
 <div class="header">
   <div class="logo">PORTO FLATS</div>
-  <div class="logo-sub">Panel de RevisiÃ³n</div>
+  <div class="logo-sub">Panel de Revisión</div>
 </div>
 
 <!-- CLIENTE -->
@@ -727,7 +727,7 @@ textarea{resize:vertical;min-height:70px;line-height:1.5}
     <input id="cliente" value="__CLIENTE__" placeholder="MARIA DE LOS ANGELES ROLANDI" required>
   </div>
   <div class="field">
-    <label>WhatsApp (con cÃ³digo de paÃ­s)</label>
+    <label>WhatsApp (con código de país)</label>
     <input id="numero_wa" value="__WA__" placeholder="5491112345678" required>
     <p class="tip">Sin +, sin espacios. Ej: 5491112345678</p>
   </div>
@@ -811,15 +811,15 @@ textarea{resize:vertical;min-height:70px;line-height:1.5}
   <div class="calc-box">
     <div class="calc-row">
       <span class="calc-label">Diaria regular (tachada en PDF):</span>
-      <span class="calc-val strike" id="diaria_reg">R$ â</span>
+      <span class="calc-val strike" id="diaria_reg">R$ —</span>
     </div>
     <div class="calc-row">
       <span class="calc-label">Diaria c/descuento:</span>
-      <span class="calc-val" id="diaria_desc">R$ â</span>
+      <span class="calc-val" id="diaria_desc">R$ —</span>
     </div>
     <div class="calc-row" style="margin-top:8px;padding-top:8px;border-top:1px solid #CDC6C3">
       <span class="calc-label" style="font-weight:700">TOTAL:</span>
-      <span class="calc-val main" id="total_disp">R$ â</span>
+      <span class="calc-val main" id="total_disp">R$ —</span>
     </div>
   </div>
   <div class="field">
@@ -871,7 +871,7 @@ textarea{resize:vertical;min-height:70px;line-height:1.5}
 <!-- ENVIAR -->
 <div class="card">
   <button class="btn-enviar" id="btn-enviar" onclick="enviar()">
-    â Enviar al cliente
+    ✅ Enviar al cliente
   </button>
   <div class="msg-box" id="msg-box"></div>
 </div>
@@ -902,7 +902,7 @@ async function enviar() {
   const btn = document.getElementById('btn-enviar');
   const msgBox = document.getElementById('msg-box');
   btn.disabled = true;
-  btn.textContent = 'Enviandoâ¦';
+  btn.textContent = 'Enviando…';
   msgBox.style.display = 'none';
 
   const feats = document.getElementById('caracteristicas').value
@@ -943,11 +943,11 @@ async function enviar() {
 
   if (!payload.cliente || !payload.numero_wa || !payload.propiedad) {
     showMsg('Falta nombre, WhatsApp o propiedad.', false);
-    btn.disabled = false; btn.textContent = 'â Enviar al cliente'; return;
+    btn.disabled = false; btn.textContent = '✅ Enviar al cliente'; return;
   }
   if (payload.total_brl <= 0) {
     showMsg('El total debe ser mayor a 0.', false);
-    btn.disabled = false; btn.textContent = 'â Enviar al cliente'; return;
+    btn.disabled = false; btn.textContent = '✅ Enviar al cliente'; return;
   }
 
   try {
@@ -958,15 +958,15 @@ async function enviar() {
     });
     const j = await r.json();
     if (j.ok) {
-      showMsg('â Enviado! Presupuesto NÂ° ' + j.num_pres + ' â PDF + mensaje enviados al cliente.', true);
-      btn.textContent = 'â Enviado';
+      showMsg('✅ Enviado! Presupuesto N° ' + j.num_pres + ' — PDF + mensaje enviados al cliente.', true);
+      btn.textContent = '✅ Enviado';
     } else {
       showMsg('Error: ' + (j.error || 'desconocido'), false);
-      btn.disabled = false; btn.textContent = 'â Enviar al cliente';
+      btn.disabled = false; btn.textContent = '✅ Enviar al cliente';
     }
   } catch(e) {
     showMsg('Error de red: ' + e.message, false);
-    btn.disabled = false; btn.textContent = 'â Enviar al cliente';
+    btn.disabled = false; btn.textContent = '✅ Enviar al cliente';
   }
 }
 
@@ -999,10 +999,10 @@ recalc();
         .replace("__ROW_NUMBER__", pre_row_number or "")
         .replace("__TIMESTAMP__", pre_timestamp or "")
     )
-    return Response(html, mimetype="text/html; charset=utf-8")
+    return Response(html.encode('utf-8'), content_type="text/html; charset=utf-8")
 
 
-# ââ /recibo-form ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /recibo-form ──────────────────────────────────────────────────────────────
 @app.route("/recibo-form", methods=["GET"])
 def recibo_form():
     """Formulario web para generar recibo manualmente."""
@@ -1041,7 +1041,7 @@ input:focus,select:focus{border-color:#87A286}
   <form id="f">
     <div class="row">
       <div class="field">
-        <label>NÂ° Recibo</label>
+        <label>N° Recibo</label>
         <input name="numero" placeholder="REC-001" required>
       </div>
       <div class="field">
@@ -1146,17 +1146,17 @@ document.getElementById('f').onsubmit = async function(e) {
 </script>
 </body>
 </html>"""
-    return Response(html, mimetype="text/html; charset=utf-8")
+    return Response(html.encode('utf-8'), content_type="text/html; charset=utf-8")
 
 
-# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
-# NUEVO FLUJO: DASHBOARD â EDITAR â PROPUESTA MULTI-OPCIÃN
-# ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ══════════════════════════════════════════════════════════════════════════════
+# NUEVO FLUJO: DASHBOARD → EDITAR → PROPUESTA MULTI-OPCIÓN
+# ══════════════════════════════════════════════════════════════════════════════
 import uuid as _uuid
 import time as _time
 import pathlib as _pathlib
 
-# ââ Constantes Sheets / Uploads âââââââââââââââââââââââââââââââââââââââââââââââ
+# ── Constantes Sheets / Uploads ───────────────────────────────────────────────
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "1p-wDJOc6axaZMs103Gu1w_9SmZXZ6Vq0Z1eXgU8tFtc")
 OPCIONES_SHEET = os.environ.get("OPCIONES_SHEET", "Opciones Pendientes")
 SERVICE_URL    = os.environ.get("SERVICE_URL", "https://pf-pdf-service.bg4ga1.easypanel.host")
@@ -1168,7 +1168,7 @@ except Exception:
     _UPL_DIR = _pathlib.Path("/tmp/pf-uploads")
     _UPL_DIR.mkdir(parents=True, exist_ok=True)
 
-# ââ Google Sheets helpers âââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── Google Sheets helpers ─────────────────────────────────────────────────────
 def _sheets_client():
     try:
         import gspread
@@ -1222,22 +1222,24 @@ def _sheets_update(row_number, col_name, value):
         return False
 
 
-# ââ Fotos: upload / serve / limpieza âââââââââââââââââââââââââââââââââââââââââ
+# ── /last-row — número de la última fila en Opciones Pendientes ──────────────
 @app.route("/last-row")
 def last_row():
-    """Devuelve el row_number de la ultima fila en Opciones Pendientes."""
+    """Devuelve el row_number de la última fila en Opciones Pendientes."""
     try:
         gc = _sheets_client()
         if not gc:
             return jsonify({"error": "No Sheets client"}), 500
         ws = gc.open_by_key(SPREADSHEET_ID).worksheet(OPCIONES_SHEET)
         all_values = ws.get_all_values()
+        # fila 1 = encabezado, última fila de datos = len(all_values)
         return jsonify({"row": len(all_values)})
     except Exception as e:
         print(f"[last-row] error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
+# ── Fotos: upload / serve / limpieza ─────────────────────────────────────────
 def _cleanup_old_photos(max_days=7):
     cutoff = _time.time() - max_days * 86400
     for f in _UPL_DIR.glob("*"):
@@ -1273,7 +1275,7 @@ def upload_foto():
     return jsonify({"ok": True, "url": SERVICE_URL + "/foto/" + fname})
 
 
-# ââ /dashboard ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /dashboard ────────────────────────────────────────────────────────────────
 @app.route("/dashboard")
 def dashboard():
     """Panel interno: cards con opciones para seleccionar y enviar."""
@@ -1331,7 +1333,7 @@ def dashboard():
             ('<div class="opt-amenids">'+amenidades+'</div>' if amenidades else ""),
             ('<div class="opt-price">'+preco_disp+'</div>' if preco_disp else ""),
             '</div>',
-            '<a href="/editar?row='+str(row)+'&idx='+str(i)+'" class="btn-editar">âï¸ Editar propuesta</a>',
+            '<a href="/editar?row='+str(row)+'&idx='+str(i)+'" class="btn-editar">✏️ Editar propuesta</a>',
             '</div>'
         ]
         return "".join(parts)
@@ -1339,7 +1341,7 @@ def dashboard():
     cards_html = "\n".join(_card(i, o) for i, o in enumerate(opciones))
     rp = []
     if nombre: rp.append(nombre)
-    if ci and co: rp.append(ci + " â " + co)
+    if ci and co: rp.append(ci + " → " + co)
     if noites: rp.append(noites + " noches")
     resumen = " \xb7 ".join(rp)
 
@@ -1393,19 +1395,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         "  const btn=document.getElementById('btn-enviar');\n"
         "  const msgBox=document.getElementById('msg-box');\n"
         "  const selected=[...document.querySelectorAll('input[name=sel]:checked')].map(x=>parseInt(x.value));\n"
-        "  btn.disabled=true;btn.textContent='Enviandoâ¦';msgBox.style.display='none';\n"
+        "  btn.disabled=true;btn.textContent='Enviando…';msgBox.style.display='none';\n"
         "  try{\n"
         "    const r=await fetch('/enviar-propuesta',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({row:'"+str(row)+"',selected})});\n"
         "    const j=await r.json();\n"
-        "    if(j.ok){msgBox.textContent='â Propuesta enviada! '+(j.url||'');msgBox.className='msg-box msg-ok';msgBox.style.display='block';btn.textContent='â Enviado';}\n"
+        "    if(j.ok){msgBox.textContent='✅ Propuesta enviada! '+(j.url||'');msgBox.className='msg-box msg-ok';msgBox.style.display='block';btn.textContent='✅ Enviado';}\n"
         "    else{msgBox.textContent='Error: '+(j.error||'desconocido');msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='&#128228; Enviar propuesta al cliente';}\n"
         "  }catch(e){msgBox.textContent='Error de red: '+e.message;msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='&#128228; Enviar propuesta al cliente';}\n"
         "}\n</script>\n</body>\n</html>"
     )
-    return Response(html, mimetype="text/html; charset=utf-8")
+    return Response(html.encode('utf-8'), content_type="text/html; charset=utf-8")
 
 
-# ââ /editar âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /editar ───────────────────────────────────────────────────────────────────
 @app.route("/editar", methods=["GET", "POST"])
 def editar():
     """Formulario para editar una opcion y subir fotos."""
@@ -1527,7 +1529,7 @@ textarea{resize:vertical;min-height:60px}
         "<style>"+css_ed+"</style>\n</head>\n<body>\n"
         "<div class='header'><div class='logo'>PORTO FLATS</div>"
         "<div class='logo-sub'>Editar Opci\xf3n #"+str(idx+1)+"</div></div>\n"
-        "<a href='/dashboard?row="+str(row)+"' class='btn-volver'>â Volver al dashboard</a>\n"
+        "<a href='/dashboard?row="+str(row)+"' class='btn-volver'>← Volver al dashboard</a>\n"
         "<form method='POST' action='/editar?row="+str(row)+"&idx="+str(idx)+"'>\n"
         "<input type='hidden' name='row' value='"+str(row)+"'>\n"
         "<input type='hidden' name='idx' value='"+str(idx)+"'>\n"
@@ -1569,17 +1571,17 @@ textarea{resize:vertical;min-height:60px}
         "  const st=document.getElementById('fst-'+fi);\n"
         "  const ur=document.getElementById('furl_'+fi);\n"
         "  const file=input.files[0];if(!file)return;\n"
-        "  st.textContent='â¦';\n"
+        "  st.textContent='…';\n"
         "  const fd=new FormData();fd.append('file',file);\n"
         "  try{\n"
         "    const r=await fetch('/upload-foto',{method:'POST',body:fd});\n"
         "    const j=await r.json();\n"
-        "    if(j.ok){ur.value=j.url;st.textContent='â';\n"
+        "    if(j.ok){ur.value=j.url;st.textContent='✅';\n"
         "      const row=document.getElementById('fr-'+fi);\n"
         "      const img=document.createElement('img');img.src=j.url;img.className='foto-prev';img.style.marginRight='8px';\n"
         "      row.insertBefore(img,row.firstChild);\n"
-        "    }else{st.textContent='â';}\n"
-        "  }catch(e){st.textContent='â';}\n"
+        "    }else{st.textContent='❌';}\n"
+        "  }catch(e){st.textContent='❌';}\n"
         "}\n"
         "function rmFoto(fi){\n"
         "  const ur=document.getElementById('furl_'+fi);\n"
@@ -1589,10 +1591,10 @@ textarea{resize:vertical;min-height:60px}
         "}\n"
         "</script>\n</body>\n</html>"
     )
-    return Response(html_ed, mimetype="text/html; charset=utf-8")
+    return Response(html_ed.encode('utf-8'), content_type="text/html; charset=utf-8")
 
 
-# ââ /enviar-propuesta âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /enviar-propuesta ─────────────────────────────────────────────────────────
 @app.route("/enviar-propuesta", methods=["POST"])
 def enviar_propuesta():
     """Recibe {row, selected:[0,2]}, envia WhatsApp al cliente con link /propuesta."""
@@ -1614,7 +1616,7 @@ def enviar_propuesta():
     short_url     = _tinyurl(propuesta_url)
     nombre_corto  = nombre.split()[0].title() if nombre else "cliente"
     eW = "\U0001f44b"; ePF = "\U0001f3d6"; eCal = "\U0001f4c5"
-    eMoon = "\U0001f319"; eLink = "\U0001f517"; DIV = "â" * 16
+    eMoon = "\U0001f319"; eLink = "\U0001f517"; DIV = "━" * 16
     msg  = eW + " Hola " + nombre_corto + "!\n\n"
     msg += "Somos *Porto Flats* " + ePF + "\n"
     msg += "Preparamos tu propuesta personalizada para Porto de Galinhas!\n\n"
@@ -1630,7 +1632,7 @@ def enviar_propuesta():
     return jsonify({"ok": True, "url": short_url, "numero": whatsapp})
 
 
-# ââ /propuesta ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /propuesta ────────────────────────────────────────────────────────────────
 @app.route("/propuesta")
 def propuesta():
     """Landing multi-opcion para el cliente. ?row=N&sel=0,1"""
@@ -1748,7 +1750,7 @@ def propuesta():
     sections_html = "".join(_section(dn, oi, o) for dn, (oi, o) in enumerate(opts, 1))
 
     info_parts = []
-    if ci and co: info_parts.append("\U0001f4c5 "+ci+" â "+co)
+    if ci and co: info_parts.append("\U0001f4c5 "+ci+" → "+co)
     if noites:    info_parts.append("\U0001f319 "+noites+" noches")
     if nombre:    info_parts.append("\U0001f464 "+nombre)
     info_bar = " &nbsp;\xb7&nbsp; ".join(info_parts) if info_parts else ""
@@ -1818,16 +1820,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         + sections_html
         + "<div class='cta-todas np'><label>"
           "<input type='checkbox' id='chk-todas' onchange='toggleTodas()'>"
-          "<span>â¨ \xa1Me interesan todas las opciones!</span></label></div>\n"
+          "<span>✨ \xa1Me interesan todas las opciones!</span></label></div>\n"
         + "<div class='pol-card'><div class='pol-title'>Pol\xedtica de cancelaci\xf3n</div>"
-          "<div class='pol-item'>â Reserva confirmada con <strong>anticipo del 50%</strong></div>"
+          "<div class='pol-item'>✅ Reserva confirmada con <strong>anticipo del 50%</strong></div>"
           "<div class='pol-item'>\U0001f4c5 Saldo abonado <strong>15 d\xedas antes</strong> del check-in</div>"
           "<div class='pol-item'>\U0001f504 Cancelaci\xf3n +30 d\xedas: reembolso del anticipo (menos tasas)</div>"
-          "<div class='pol-item'>â Cancelaci\xf3n -30 d\xedas: sin reembolso</div>"
+          "<div class='pol-item'>❌ Cancelaci\xf3n -30 d\xedas: sin reembolso</div>"
           "<div class='pol-item'>\U0001f4b3 Pago: transferencia bancaria o PIX</div></div>\n"
         + "<div class='footer-bar np'>"
           "<button class='btn-confirm' id='btn-confirm' disabled onclick='confirmar()'>"
-          "â Confirmar selecci\xf3n</button>"
+          "✅ Confirmar selecci\xf3n</button>"
           "<div class='accept-txt'>Al confirmar acept\xe1s nuestra pol\xedtica de cancelaci\xf3n.</div>"
           "<div class='msg-box' id='msg-box'></div></div>\n"
         + "<div class='footer np'>Porto Flats \xb7 Alquileres temporarios<br>"
@@ -1842,19 +1844,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           "  const todas=document.getElementById('chk-todas').checked;\n"
           "  const opts=todas?[...document.querySelectorAll('.opt-chk')].map(c=>parseInt(c.value)):[...document.querySelectorAll('.opt-chk:checked')].map(c=>parseInt(c.value));\n"
           "  if(!opts.length)return;\n"
-          "  btn.disabled=true;btn.textContent='Confirmandoâ¦';msgBox.style.display='none';\n"
+          "  btn.disabled=true;btn.textContent='Confirmando…';msgBox.style.display='none';\n"
           "  try{\n"
           "    const r=await fetch('/confirmar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({row:ROW,opciones_elegidas:opts})});\n"
           "    const j=await r.json();\n"
-          "    if(j.ok){btn.textContent='â \xa1Confirmado!';msgBox.textContent='\xa1Muchas gracias! Te contactamos a la brevedad.';msgBox.className='msg-box msg-ok';msgBox.style.display='block';}\n"
-          "    else{msgBox.textContent='Error: '+(j.error||'intent\xe1 de nuevo');msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='â Confirmar selecci\xf3n';}\n"
-          "  }catch(e){msgBox.textContent='Error de red. Contact\xe1nos por WhatsApp.';msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='â Confirmar selecci\xf3n';}\n"
+          "    if(j.ok){btn.textContent='✅ \xa1Confirmado!';msgBox.textContent='\xa1Muchas gracias! Te contactamos a la brevedad.';msgBox.className='msg-box msg-ok';msgBox.style.display='block';}\n"
+          "    else{msgBox.textContent='Error: '+(j.error||'intent\xe1 de nuevo');msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='✅ Confirmar selecci\xf3n';}\n"
+          "  }catch(e){msgBox.textContent='Error de red. Contact\xe1nos por WhatsApp.';msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='✅ Confirmar selecci\xf3n';}\n"
           "}\n</script>\n</body>\n</html>"
     )
-    return Response(html_p, mimetype="text/html; charset=utf-8")
+    return Response(html_p.encode('utf-8'), content_type="text/html; charset=utf-8")
 
 
-# ââ /confirmar ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+# ── /confirmar ────────────────────────────────────────────────────────────────
 @app.route("/confirmar", methods=["POST"])
 def confirmar():
     """Cliente confirma opciones -> WhatsApp a Marcelo."""
@@ -1883,7 +1885,7 @@ def confirmar():
         opts_txt = "*" + nombres_eleg[0] + "* y *" + nombres_eleg[1] + "*"
     else:
         opts_txt = ", ".join("*"+n+"*" for n in nombres_eleg[:-1]) + " y *" + nombres_eleg[-1] + "*"
-    msg = ("â *" + nombre_corto + "* eligi\xf3 su opci\xf3n de Porto de Galinhas!\n\n"
+    msg = ("✅ *" + nombre_corto + "* eligi\xf3 su opci\xf3n de Porto de Galinhas!\n\n"
            "Le gust\xf3: " + opts_txt + "\n\n"
            "Fila Sheets #" + row + " \xb7 Contact\xe1lo para confirmar la reserva.")
     _evo_send_text(MARCELO_NUM, msg)
