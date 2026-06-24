@@ -1294,6 +1294,26 @@ def upload_foto():
     return jsonify({"ok": True, "url": SERVICE_URL + "/foto/" + fname})
 
 
+# ── /debug-row ────────────────────────────────────────────────────────────────
+@app.route("/debug-row")
+def debug_row():
+    row = request.args.get("row", "")
+    if not row:
+        return Response("Falta ?row=N", status=400, mimetype="text/plain")
+    try:
+        gc = _sheets_client()
+        ws = gc.open_by_key(SPREADSHEET_ID).worksheet(OPCIONES_SHEET)
+        headers = ws.row_values(1)
+        values  = ws.row_values(int(row))
+        rd = {h: (values[i] if i < len(values) else "") for i, h in enumerate(headers)}
+        out = "HEADERS: " + repr(headers) + "\n\n"
+        for k, v in rd.items():
+            out += f"{k!r}: {v!r}\n"
+        return Response(out, mimetype="text/plain; charset=utf-8")
+    except Exception as e:
+        return Response(f"Error: {e}", status=500, mimetype="text/plain")
+
+
 # ── /dashboard ────────────────────────────────────────────────────────────────
 @app.route("/dashboard")
 def dashboard():
