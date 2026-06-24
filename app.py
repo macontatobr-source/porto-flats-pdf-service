@@ -1229,10 +1229,11 @@ def _sheets_append_row(data_dict):
         if not gc: return None
         ws = gc.open_by_key(SPREADSHEET_ID).worksheet(OPCIONES_SHEET)
         headers = ws.row_values(1)
+        # Contar filas ANTES del append para calcular el número correcto
+        rows_before = len(ws.get_all_values())
         row_vals = [str(data_dict.get(h, "")) for h in headers]
         ws.append_row(row_vals, value_input_option="USER_ENTERED")
-        all_vals = ws.get_all_values()
-        return len(all_vals)
+        return rows_before + 1  # la nueva fila está una después de las existentes
     except Exception as e:
         print(f"[Sheets] append_row error: {e}")
         return None
@@ -2169,9 +2170,39 @@ def nuevo_presupuesto():
         msg = ("\U0001f30a Hola *" + nombre_corto + "*!\n\n"
                "Te preparamos una propuesta de alojamiento en Porto de Galinhas.\n\n"
                "\U0001f4cc Ver opciones y confirmar:\n" + prop_url)
-        _evo_send_text(wa_dest, msg)
+        wa_ok = _evo_send_text(wa_dest, msg)
 
-        return redirect("/dashboard?row=" + str(new_row))
+        # ── Pantalla de confirmación ──
+        html_ok = (
+            "<!DOCTYPE html><html lang='es'><head>"
+            "<meta charset='UTF-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>"
+            "<title>Propuesta enviada \xb7 Porto Flats</title>"
+            "<style>"
+            "*{box-sizing:border-box;margin:0;padding:0}"
+            "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
+            "background:#EDE9E3;color:#3D3D3D;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}"
+            ".card{background:#fff;border-radius:18px;padding:32px 24px;max-width:420px;width:100%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08)}"
+            ".icon{font-size:52px;margin-bottom:16px}"
+            "h1{font-size:20px;font-weight:700;color:#87A286;margin-bottom:8px}"
+            "p{font-size:14px;color:#666;line-height:1.6;margin-bottom:6px}"
+            ".wa-num{font-size:13px;font-weight:600;color:#3D3D3D;background:#EDE9E3;padding:6px 14px;border-radius:20px;display:inline-block;margin:10px 0 18px}"
+            ".btn{display:block;padding:14px;border-radius:12px;font-size:15px;font-weight:700;text-decoration:none;margin-bottom:10px;cursor:pointer;border:none;width:100%}"
+            ".btn-green{background:#87A286;color:#fff}"
+            ".btn-outline{background:#EDE9E3;color:#3D3D3D}"
+            "</style></head><body>"
+            "<div class='card'>"
+            "<div class='icon'>" + ("\U0001f4ac✅" if wa_ok else "⚠️") + "</div>"
+            "<h1>" + ("Propuesta enviada!" if wa_ok else "Propuesta guardada (revisar WA)") + "</h1>"
+            "<p>Cliente: <strong>" + nombre_completo + "</strong></p>"
+            + ("<p>WhatsApp:</p><div class='wa-num'>+" + wa_dest + "</div>" if wa_ok else
+               "<p style='color:#c0392b'>El WhatsApp no se pudo enviar. Reenv\xealo manualmente.</p>")
+            + "<a href='" + prop_url + "' class='btn btn-green' target='_blank'>\U0001f440 Ver propuesta del cliente</a>"
+            "<a href='/nuevo-presupuesto' class='btn btn-outline'>➕ Nueva propuesta</a>"
+            "<a href='/dashboard?row=" + str(new_row) + "' class='btn btn-outline' style='color:#87A286'>\U0001f4cb Ver en dashboard</a>"
+            "</div></body></html>"
+        )
+        return Response(html_ok.encode("utf-8"), content_type="text/html; charset=utf-8")
 
     # ── GET ── Renderizar formulario ──────────────────────────────────────────
     def _opt_fields(sfx, label):
