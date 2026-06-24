@@ -1160,7 +1160,8 @@ import pathlib as _pathlib
 
 # ── Constantes Sheets / Uploads ───────────────────────────────────────────────
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID", "1p-wDJOc6axaZMs103Gu1w_9SmZXZ6Vq0Z1eXgU8tFtc")
-OPCIONES_SHEET = os.environ.get("OPCIONES_SHEET", "Opciones Pendientes")
+OPCIONES_SHEET  = os.environ.get("OPCIONES_SHEET",  "Opciones Pendientes")
+HISTORIAL_SHEET = os.environ.get("HISTORIAL_SHEET", "Nuevas propuestas historial")
 SERVICE_URL    = os.environ.get("SERVICE_URL", "https://pf-pdf-service.bg4ga1.easypanel.host")
 
 _UPL_DIR = _pathlib.Path(os.environ.get("UPLOADS_DIR", "/app/uploads"))
@@ -1239,6 +1240,20 @@ def _sheets_append_row(data_dict):
     except Exception as e:
         print(f"[Sheets] append_row error: {e}")
         return None
+
+
+def _sheets_historial(nombre, whatsapp, email, ci, co, noites, link):
+    """Guarda fila simple en pestaña historial. No bloquea si falla."""
+    try:
+        import datetime as _dt
+        gc = _sheets_client()
+        if not gc: return
+        ws = gc.open_by_key(SPREADSHEET_ID).worksheet(HISTORIAL_SHEET)
+        fecha = _dt.datetime.now().strftime("%d/%m/%Y %H:%M")
+        ws.append_row([fecha, nombre, whatsapp, email, ci, co, noites, link],
+                      value_input_option="RAW")
+    except Exception as e:
+        print(f"[Historial] error: {e}")
 
 
 # ── /last-row — número de la última fila en Opciones Pendientes ──────────────
@@ -1834,23 +1849,41 @@ def _propuesta_pol(opts):
 # ── /propuesta ────────────────────────────────────────────────────────────────
 @app.route("/propuesta")
 def propuesta():
-    """Landing multi-opcion para el cliente. ?row=N&sel=0,1"""
+    """Landing multi-opcion para el cliente. ?data=BASE64&sel=0 o ?row=N&sel=0,1"""
+    import base64 as _b64
     from urllib.parse import quote as urlquote
-    row     = request.args.get("row", "")
-    sel_raw = request.args.get("sel", "")
-    if not row:
-        return Response("Falta ?row=N", status=400, mimetype="text/plain")
-    rd = _sheets_get_row(row)
-    if not rd:
-        return Response("No se pudo cargar la propuesta.", status=500, mimetype="text/plain")
-    nombre  = rd.get("nombre", "")
-    ci      = rd.get("fecha_entrada", "")
-    co      = rd.get("fecha_salida",  "")
-    noites  = rd.get("noites", "")
-    try:
-        all_opts = json.loads(rd.get("opciones_json", "[]") or "[]")
-    except Exception:
-        all_opts = []
+    sel_raw  = request.args.get("sel", "")
+    data_b64 = request.args.get("data", "")
+
+    if data_b64:
+        # ── Modo manual: datos codificados en el URL, sin Sheets ──
+        try:
+            padding  = 4 - len(data_b64) % 4
+            payload  = json.loads(_b64.urlsafe_b64decode(data_b64 + "=" * padding).decode("utf-8"))
+            nombre   = payload.get("nombre", "")
+            ci       = payload.get("ci", "")
+            co       = payload.get("co", "")
+            noites   = payload.get("noites", "")
+            all_opts = payload.get("opciones", [])
+        except Exception as e:
+            return Response("Error cargando propuesta: " + str(e), status=400, mimetype="text/plain")
+    else:
+        # ── Modo Typebot: leer desde Sheets por row ──
+        row = request.args.get("row", "")
+        if not row:
+            return Response("Falta ?data= o ?row=", status=400, mimetype="text/plain")
+        rd = _sheets_get_row(row)
+        if not rd:
+            return Response("No se pudo cargar la propuesta.", status=500, mimetype="text/plain")
+        nombre  = rd.get("nombre", "")
+        ci      = rd.get("fecha_entrada", "")
+        co      = rd.get("fecha_salida",  "")
+        noites  = rd.get("noites", "")
+        try:
+            all_opts = json.loads(rd.get("opciones_json", "[]") or "[]")
+        except Exception:
+            all_opts = []
+
     if sel_raw:
         try:
             idxs = [int(x.strip()) for x in sel_raw.split(",") if x.strip().isdigit()]
@@ -2168,26 +2201,25 @@ def nuevo_presupuesto():
         opciones = [opt0]
         if any(opt1.values()): opciones.append(opt1)
 
-        # ── Guardar en Sheets ──
-        data_dict = {
-            "nombre":        nombre_completo,
-            "fecha_entrada": ci,
-            "fecha_salida":  co,
-            "noites":        noites,
-            "whatsapp":      wa_dest,
-            "email":         email_cl,
-            "personas":      personas,
-            "estado":        "Manual",
-            "notas_internas": notas_int,
-            "opciones_json": json.dumps(opciones, ensure_ascii=False),
+        # ── Generar URL con datos codificados (sin depender de Sheets) ──
+        import base64 as _b64
+        payload_dict = {
+            "nombre":  nombre_completo,
+            "ci":      ci,
+            "co":      co,
+            "noites":  noites,
+            "opciones": opciones,
         }
-        new_row = _sheets_append_row(data_dict)
-        if not new_row:
-            return Response("Error guardando en Sheets.", status=500, mimetype="text/plain")
+        data_b64 = _b64.urlsafe_b64encode(
+            json.dumps(payload_dict, ensure_ascii=False).encode("utf-8")
+        ).decode().rstrip("=")
+        sel_idxs = ",".join(str(i) for i in range(len(opciones)))
+        prop_url  = SERVICE_URL + "/propuesta?data=" + data_b64 + "&sel=" + sel_idxs
+
+        # ── Guardar en historial (best-effort, no bloquea) ──
+        _sheets_historial(nombre_completo, wa_dest, email_cl, ci, co, noites, prop_url)
 
         # ── Enviar WhatsApp al cliente ──
-        sel_idxs = ",".join(str(i) for i in range(len(opciones)))
-        prop_url  = SERVICE_URL + "/propuesta?row=" + str(new_row) + "&sel=" + sel_idxs
         nombre_corto = nombre.split()[0].title() if nombre else "!"
         msg = ("\U0001f30a Hola *" + nombre_corto + "*!\n\n"
                "Te preparamos una propuesta de alojamiento en Porto de Galinhas.\n\n"
@@ -2221,7 +2253,6 @@ def nuevo_presupuesto():
                "<p style='color:#c0392b'>El WhatsApp no se pudo enviar. Reenv\xealo manualmente.</p>")
             + "<a href='" + prop_url + "' class='btn btn-green' target='_blank'>\U0001f440 Ver propuesta del cliente</a>"
             "<a href='/nuevo-presupuesto' class='btn btn-outline'>➕ Nueva propuesta</a>"
-            "<a href='/dashboard?row=" + str(new_row) + "' class='btn btn-outline' style='color:#87A286'>\U0001f4cb Ver en dashboard</a>"
             "</div></body></html>"
         )
         return Response(html_ok.encode("utf-8"), content_type="text/html; charset=utf-8")
