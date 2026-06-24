@@ -2101,11 +2101,12 @@ def nuevo_presupuesto():
         notas_int = request.form.get("notas_internas", "")
         pais      = request.form.get("pais", "BR")
         wa_num    = request.form.get("whatsapp_num", "").strip().replace(" ","").replace("-","")
-        # Calcular noches
+        email_cl  = request.form.get("email_cliente", "").strip()
+        # Calcular noches (type=date devuelve YYYY-MM-DD)
         noites = ""
         try:
             from datetime import datetime as dt
-            for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
                 try:
                     d1 = dt.strptime(ci, fmt); d2 = dt.strptime(co, fmt)
                     noites = str((d2 - d1).days); break
@@ -2151,6 +2152,7 @@ def nuevo_presupuesto():
             "fecha_salida":  co,
             "noites":        noites,
             "whatsapp":      wa_dest,
+            "email":         email_cl,
             "personas":      personas,
             "estado":        "Manual",
             "notas_internas": notas_int,
@@ -2282,8 +2284,8 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "<div class='field'><label class='lbl'>Apellido</label><input type='text' name='apellido' placeholder='García'></div>"
         "</div>"
         "<div class='row'>"
-        "<div class='field'><label class='lbl'>Fecha entrada</label><input type='text' name='fecha_entrada' placeholder='dd/mm/aaaa' id='fecha_entrada'></div>"
-        "<div class='field'><label class='lbl'>Fecha salida</label><input type='text' name='fecha_salida' placeholder='dd/mm/aaaa' id='fecha_salida' oninput='calcNoches()'></div>"
+        "<div class='field'><label class='lbl'>Fecha entrada</label><input type='date' name='fecha_entrada' id='fecha_entrada' onchange='calcNoches()'></div>"
+        "<div class='field'><label class='lbl'>Fecha salida</label><input type='date' name='fecha_salida' id='fecha_salida' onchange='calcNoches()'></div>"
         "</div>"
         "<div class='row'>"
         "<div class='field'><label class='lbl'>Noches <span style='color:#87A286'>(auto)</span></label>"
@@ -2295,17 +2297,20 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "<input type='text' name='notas_internas' placeholder='Familia con ni\xf1os, prefiere piscina...'></div>"
         "</div>\n"
         # ── Contacto ──
-        "<div class='card'><h2>\U0001f4f2 Contacto WhatsApp</h2>"
+        "<div class='card'><h2>\U0001f4f2 Contacto</h2>"
         "<div class='wa-row'>"
-        "<div class='field wa-sel'><label class='lbl'>País</label>"
+        "<div class='field wa-sel'><label class='lbl'>Pa\xeds</label>"
         "<select name='pais'>"
-        "<option value='BR'>🇧🇷 +55</option>"
-        "<option value='AR'>🇦🇷 +549</option>"
-        "<option value='US'>🇺🇸 +1</option>"
+        "<option value='BR'>\U0001f1e7\U0001f1f7 +55</option>"
+        "<option value='AR'>\U0001f1e6\U0001f1f7 +549</option>"
+        "<option value='US'>\U0001f1fa\U0001f1f8 +1</option>"
         "</select></div>"
-        "<div class='field' style='flex:1'><label class='lbl'>Número (sin código de país)</label>"
+        "<div class='field' style='flex:1'><label class='lbl'>WhatsApp (sin c\xf3digo de pa\xeds)</label>"
         "<input type='text' name='whatsapp_num' placeholder='81 9 1234-5678' required></div>"
-        "</div></div>\n"
+        "</div>"
+        "<div class='field'><label class='lbl'>Email del cliente <small style='color:#aaa;text-transform:none'>(opcional)</small></label>"
+        "<input type='email' name='email_cliente' placeholder='cliente@email.com'></div>"
+        "</div>\n"
         # ── Opción 1 ──
         + _opt_fields("_0", "\U0001f3e0 Opci\xf3n 1")
         # ── Botón agregar opción 2 ──
@@ -2325,16 +2330,11 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "  const b=document.getElementById('fecha_salida').value;\n"
         "  const badge=document.getElementById('noches-badge');\n"
         "  const hid=document.getElementById('noites_hidden');\n"
-        "  function parseDate(s){\n"
-        "    const p=s.split('/');if(p.length===3)return new Date(p[2],p[1]-1,p[0]);\n"
-        "    return new Date(s);\n"
-        "  }\n"
         "  if(!a||!b){badge.textContent='—';hid.value='';return;}\n"
-        "  const diff=Math.round((parseDate(b)-parseDate(a))/(1000*60*60*24));\n"
-        "  if(diff>0){badge.textContent=diff+' noches';hid.value=diff;}\n"
+        "  const diff=Math.round((new Date(b+' 12:00')-new Date(a+' 12:00'))/(1000*60*60*24));\n"
+        "  if(diff>0){badge.textContent=diff+(diff===1?' noche':' noches');hid.value=diff;}\n"
         "  else{badge.textContent='—';hid.value='';}\n"
         "}\n"
-        "document.getElementById('fecha_entrada').addEventListener('input',calcNoches);\n"
         "function showOpt2(){document.getElementById('opt2-block').style.display='block';this.style.display='none';}\n"
         "function hideOpt2(){document.getElementById('opt2-block').style.display='none';"
         "document.querySelector('.btn-add-opt').style.display='block';}\n"
