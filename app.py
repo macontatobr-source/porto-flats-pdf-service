@@ -1771,24 +1771,19 @@ def _propuesta_pol(opts):
     pol_items = (
         "<div class='pol-item'>✅ Reserva confirmada con <strong>anticipo del "+anticipo+"%</strong></div>"
         "<div class='pol-item'>\U0001f4c5 Saldo debe abonarse <strong>"+saldo_pl+"</strong> antes del check-in</div>"
-        "<div class='pol-item'>\U0001f504 Cancelaci\xf3n +30 d\xedas: reembolso del anticipo (menos tasas)</div>"
-        "<div class='pol-item'>❌ Cancelaci\xf3n -30 d\xedas: sin reembolso</div>"
         "<div class='pol-item'>\U0001f4b3 Forma de pago: "+forma_pago+"</div>"
     )
     modal = (
         "<div id='modal-tc' onclick='if(event.target===this)closeTc()' style='"
         "display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center;padding:16px'>"
-        "<div style='background:#fff;border-radius:16px;padding:24px;max-width:480px;width:100%;max-height:80vh;overflow-y:auto'>"
-        "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:16px'>"
+        "<div style='background:#fff;border-radius:16px;overflow:hidden;max-width:480px;width:100%;height:80vh;display:flex;flex-direction:column'>"
+        "<div style='display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #eee;flex-shrink:0'>"
         "<span style='font-weight:700;font-size:16px'>T\xe9rminos y condiciones</span>"
         "<button onclick='closeTc()' style='background:none;border:none;font-size:22px;cursor:pointer;color:#888'>✕</button></div>"
-        "<div style='font-size:13px;line-height:1.8;color:#555'>"
-        "<p>✅ <strong>Reserva:</strong> Se confirma con el pago del anticipo del "+anticipo+"%.</p>"
-        "<p>\U0001f4c5 <strong>Saldo:</strong> "+saldo_pl+" antes del check-in.</p>"
-        "<p>\U0001f504 <strong>Cancelaci\xf3n con m\xe1s de 30 d\xedas:</strong> Reembolso del anticipo menos gastos de gesti\xf3n.</p>"
-        "<p>❌ <strong>Cancelaci\xf3n con menos de 30 d\xedas:</strong> Sin reembolso.</p>"
-        "<p>\U0001f4b3 <strong>Formas de pago:</strong> "+forma_pago+".</p>"
-        "<p style='margin-top:12px;font-size:12px;color:#aaa'>Porto Flats \xb7 Porto de Galinhas, Pernambuco, Brasil</p>"
+        "<iframe src='https://portoflatsbr.com/#terminoscondiciones' style='flex:1;border:none;width:100%' loading='lazy'></iframe>"
+        "<div style='padding:10px;text-align:center;border-top:1px solid #eee;flex-shrink:0'>"
+        "<a href='https://portoflatsbr.com/#terminoscondiciones' target='_blank' "
+        "style='font-size:12px;color:#87A286;text-decoration:none'>\U0001f517 Abrir en nueva pesta\xf1a</a>"
         "</div></div></div>"
     )
     return (
@@ -1895,8 +1890,10 @@ def propuesta():
                         "<div class='maps-wrap'><iframe src='https://maps.google.com/maps?q="+loc_q+"&output=embed' "
                         "width='100%' height='200' frameborder='0' style='border:0;border-radius:12px;display:block' "
                         "allowfullscreen loading='lazy'></iframe></div></div>")
-        obs_html = ("<div class='card'><p style='font-size:13px;color:#555;line-height:1.6'>&#8505;&#65039; "+observ+"</p></div>"
-                    if observ else "")
+        obs_lines = observ.replace("\r\n", "\n").replace("\r", "\n").split("\n") if observ else []
+        obs_html = ("<div class='card'>"
+                    + "".join("<p style='font-size:13px;color:#555;line-height:1.6;margin-bottom:4px'>&#8505;&#65039; "+ln.strip()+"</p>" for ln in obs_lines if ln.strip())
+                    + "</div>") if obs_lines else ""
         elegir_html = ("<div class='card np'><div class='sec-title'>\xbfTe gusta esta opci\xf3n?</div>"
                        "<label class='elegir-label' for='chk-"+str(orig_idx)+"'>"
                        "<input type='checkbox' class='opt-chk' id='chk-"+str(orig_idx)+"' name='opts' "
@@ -1990,8 +1987,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         + "<div class='footer-bar np'>"
           "<button class='btn-confirm' id='btn-confirm' disabled onclick='confirmar()'>"
           "✅ Confirmar selecci\xf3n</button>"
-          "<div class='accept-txt'>Al confirmar acept\xe1s nuestra <a onclick='openTc()' style='color:#87A286;text-decoration:underline;cursor:pointer'>pol\xedtica de cancelaci\xf3n</a>.</div>"
+          "<div class='accept-txt'>Al confirmar acept\xe1s nuestros <a onclick='openTc()' style='color:#87A286;text-decoration:underline;cursor:pointer'>t\xe9rminos y condiciones</a>.</div>"
           "<div class='msg-box' id='msg-box'></div></div>\n"
+        + "<div style='margin:0 14px 6px;'>"
+          "<button onclick='window.print()' class='btn' style='background:#EDE9E3;color:#3D3D3D;font-size:15px;font-weight:600'>"
+          "\U0001f4e5 Descargar PDF</button></div>\n"
         + "<div class='footer np'>Porto Flats \xb7 Alquileres temporarios<br>"
           "Porto de Galinhas \xb7 Pernambuco \xb7 Brasil<br>"
           "<small>Esta propuesta fue preparada especialmente para vos</small></div>\n"
