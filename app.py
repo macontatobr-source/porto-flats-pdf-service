@@ -1453,7 +1453,7 @@ def editar():
         for field in ["nome", "distancia", "quartos", "banheiros", "hospedes",
                       "amenidades", "preco_total", "taxa_limpeza", "mapa_url", "observaciones",
                       "preco_noche", "n_noites", "margen_pct", "preco_sugerido", "ganancia_r",
-                      "forma_pago", "reserva_anticipo", "saldo_plazo"]:
+                      "forma_pago", "reserva_anticipo", "saldo_plazo", "cond_extra"]:
             val = request.form.get(field)
             if val is not None:
                 opt[field] = val
@@ -1503,6 +1503,7 @@ def editar():
     forma_pago     = _s(opt.get("forma_pago",      ""))
     reserva_anticipo = _s(opt.get("reserva_anticipo","50"))
     saldo_plazo    = _s(opt.get("saldo_plazo",     "15 días"))
+    cond_extra_ed  = _s(opt.get("cond_extra",      ""))
     # Compute missing values
     try:
         pv_ed = float(preco.replace(",",".") or 0)
@@ -1646,6 +1647,8 @@ textarea{resize:vertical;min-height:60px}
         "<span style='font-size:15px;color:#3D3D3D'>%</span></div></div>"
         "<div class='field' style='margin-top:12px'><label class='lbl'>Saldo debe abonarse antes del check-in</label>"
         "<input type='text' name='saldo_plazo' value='"+str(saldo_plazo)+"' placeholder='15 d\xedas' style='margin-top:6px'></div>"
+        "<div class='field' style='margin-top:10px'><label class='lbl'>Nota libre en condiciones <small style='color:#aaa;text-transform:none'>(opcional)</small></label>"
+        "<textarea name='cond_extra' rows='2' placeholder='Ej: Incluye ropa de cama. Mascotas no permitidas.'>"+cond_extra_ed+"</textarea></div>"
         "</div>\n"
         "<div class='card'><h2>\U0001f4cd Mapa</h2>\n"
         "<div class='field'><label class='lbl'>URL Google Maps</label>"
@@ -1786,10 +1789,7 @@ def _propuesta_pol(opts):
         "style='font-size:12px;color:#87A286;text-decoration:none'>\U0001f517 Abrir en nueva pesta\xf1a</a>"
         "</div></div></div>"
     )
-    return (
-        "<div class='pol-card'><div class='pol-title'>Condiciones de reserva</div>"
-        + pol_items + "</div>\n" + modal
-    )
+    return modal
 
 
 # ── /propuesta ────────────────────────────────────────────────────────────────
@@ -1894,6 +1894,18 @@ def propuesta():
         obs_html = ("<div class='card'>"
                     + "".join("<p style='font-size:13px;color:#555;line-height:1.6;margin-bottom:4px'>&#8505;&#65039; "+ln.strip()+"</p>" for ln in obs_lines if ln.strip())
                     + "</div>") if obs_lines else ""
+        # Condiciones de reserva (por opción)
+        anticipo_opt  = str(opt.get("reserva_anticipo", "50"))
+        saldo_opt     = str(opt.get("saldo_plazo",      "15 d\xedas"))
+        forma_opt     = str(opt.get("forma_pago",       ""))
+        cond_extra    = str(opt.get("cond_extra",       ""))
+        cond_items = (
+            "<div class='pol-item'>✅ Reserva confirmada con <strong>anticipo del "+anticipo_opt+"%</strong></div>"
+            "<div class='pol-item'>\U0001f4c5 Saldo debe abonarse <strong>"+saldo_opt+"</strong> antes del check-in</div>"
+            + ("<div class='pol-item'>\U0001f4b3 Forma de pago: "+forma_opt+"</div>" if forma_opt else "")
+            + ("<div class='pol-item'>\U0001f4dd "+cond_extra+"</div>" if cond_extra else "")
+        )
+        cond_html = "<div class='card'><div class='sec-title'>Condiciones de reserva</div>"+cond_items+"</div>"
         elegir_html = ("<div class='card np'><div class='sec-title'>\xbfTe gusta esta opci\xf3n?</div>"
                        "<label class='elegir-label' for='chk-"+str(orig_idx)+"'>"
                        "<input type='checkbox' class='opt-chk' id='chk-"+str(orig_idx)+"' name='opts' "
@@ -1906,7 +1918,7 @@ def propuesta():
                 + "</div>"
                 + carousel
                 + "<div class='card'><div class='sec-title'>Caracter\xedsticas</div>"+feats+"</div>"
-                + amenids_html + price_html + map_html + obs_html + elegir_html
+                + amenids_html + price_html + map_html + obs_html + cond_html + elegir_html
                 + "</div><div class='divider'></div>")
 
     sections_html = "".join(_section(dn, oi, o) for dn, (oi, o) in enumerate(opts, 1))
