@@ -2083,6 +2083,308 @@ def confirmar():
     return jsonify({"ok": True})
 
 
+# ── /nuevo-presupuesto ────────────────────────────────────────────────────────
+@app.route("/nuevo-presupuesto", methods=["GET", "POST"])
+def nuevo_presupuesto():
+    """Panel manual: Marcelo crea y envía una propuesta sin Typebot."""
+    from flask import redirect
+    import datetime
+
+    if request.method == "POST":
+        # ── Datos del cliente ──
+        nombre    = request.form.get("nombre", "").strip()
+        apellido  = request.form.get("apellido", "").strip()
+        nombre_completo = (nombre + " " + apellido).strip()
+        ci        = request.form.get("fecha_entrada", "")
+        co        = request.form.get("fecha_salida",  "")
+        personas  = request.form.get("personas", "")
+        notas_int = request.form.get("notas_internas", "")
+        pais      = request.form.get("pais", "BR")
+        wa_num    = request.form.get("whatsapp_num", "").strip().replace(" ","").replace("-","")
+        # Calcular noches
+        noites = ""
+        try:
+            from datetime import datetime as dt
+            for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+                try:
+                    d1 = dt.strptime(ci, fmt); d2 = dt.strptime(co, fmt)
+                    noites = str((d2 - d1).days); break
+                except Exception: pass
+        except Exception: pass
+        # Formatear WhatsApp destino
+        prefijos = {"AR": "549", "BR": "55", "US": "1"}
+        prefix = prefijos.get(pais, "55")
+        wa_dest = prefix + wa_num
+
+        # ── Opciones ──
+        def _build_opt(sfx):
+            """Construye dict de opción desde campos del form con sufijo _0 o _1."""
+            def fv(k): return request.form.get(k + sfx, "")
+            opt = {}
+            for f in ["nome","distancia","quartos","banheiros","hospedes","amenidades",
+                      "preco_total","taxa_limpeza","mapa_url","observaciones","cond_extra",
+                      "preco_noche","n_noites","margen_pct","preco_sugerido","ganancia_r",
+                      "reserva_anticipo","saldo_plazo","url"]:
+                v = fv(f)
+                if v: opt[f] = v
+            # forma_pago
+            fps = ["fp_efectivo","fp_transf","fp_pix","fp_cripto","fp_tarjeta"]
+            labels = {"fp_efectivo":"Efectivo","fp_transf":"Transferencia",
+                      "fp_pix":"PIX","fp_cripto":"Cripto","fp_tarjeta":"Tarjeta"}
+            chosen = [labels[k] for k in fps if request.form.get(k+sfx)]
+            if chosen: opt["forma_pago"] = " \xb7 ".join(chosen)
+            # fotos
+            for fi in range(1, 6):
+                u = request.form.get("foto"+str(fi)+"_up"+sfx, "")
+                if u: opt["foto"+str(fi)+"_up"] = u
+            return opt
+
+        opt0 = _build_opt("_0")
+        opt1 = _build_opt("_1")
+        opciones = [opt0]
+        if any(opt1.values()): opciones.append(opt1)
+
+        # ── Guardar en Sheets ──
+        data_dict = {
+            "nombre":        nombre_completo,
+            "fecha_entrada": ci,
+            "fecha_salida":  co,
+            "noites":        noites,
+            "whatsapp":      wa_dest,
+            "personas":      personas,
+            "estado":        "Manual",
+            "notas_internas": notas_int,
+            "opciones_json": json.dumps(opciones, ensure_ascii=False),
+        }
+        new_row = _sheets_append_row(data_dict)
+        if not new_row:
+            return Response("Error guardando en Sheets.", status=500, mimetype="text/plain")
+
+        # ── Enviar WhatsApp al cliente ──
+        sel_idxs = ",".join(str(i) for i in range(len(opciones)))
+        prop_url  = SERVICE_URL + "/propuesta?row=" + str(new_row) + "&sel=" + sel_idxs
+        nombre_corto = nombre.split()[0].title() if nombre else "!"
+        msg = ("\U0001f30a Hola *" + nombre_corto + "*!\n\n"
+               "Te preparamos una propuesta de alojamiento en Porto de Galinhas.\n\n"
+               "\U0001f4cc Ver opciones y confirmar:\n" + prop_url)
+        _evo_send_text(wa_dest, msg)
+
+        return redirect("/dashboard?row=" + str(new_row))
+
+    # ── GET ── Renderizar formulario ──────────────────────────────────────────
+    def _opt_fields(sfx, label):
+        """Genera el bloque HTML de campos para una opción."""
+        def fi(name, lbl, typ="text", ph="", extra=""):
+            return ("<div class='field'><label class='lbl'>"+lbl+"</label>"
+                    "<input type='"+typ+"' name='"+name+sfx+"' placeholder='"+ph+"' "+extra+"></div>")
+        def frow(*items):
+            return "<div class='row'>"+"".join(items)+"</div>"
+        fps_html = (
+            "<div class='field'><label class='lbl'>Forma de pago</label>"
+            "<div class='pago-opts'>"
+            + "".join("<label class='pago-opt'><input type='checkbox' name='"+k+sfx+"'>"+v+"</label>"
+                      for k,v in [("fp_efectivo","Efectivo"),("fp_transf","Transferencia"),
+                                  ("fp_pix","PIX"),("fp_cripto","Cripto"),("fp_tarjeta","Tarjeta")])
+            + "</div></div>"
+        )
+        fotos_html = "".join(
+            "<div class='foto-row foto-empty' id='fr"+sfx+"-"+str(fi2)+"'>"
+            "<span class='foto-num'>"+str(fi2)+"</span>"
+            "<label class='upload-lbl'>"
+            "<input type='file' accept='image/*' onchange='uploadFoto"+sfx.replace(\"-\",\"\")+
+            "(this,"+str(fi2)+")' style='display:none'>&#128247; Foto "+str(fi2)+"</label>"
+            "<span class='fstatus' id='fst"+sfx+"-"+str(fi2)+"'></span>"
+            "<input type='hidden' name='foto"+str(fi2)+"_up"+sfx+"' id='furl"+sfx+"-"+str(fi2)+"' value=''></div>"
+            for fi2 in range(1, 6)
+        )
+        return (
+            "<div class='card'><h2>"+label+"</h2>"
+            + fi("url", "\U0001f517 Link del anuncio (para buscar fotos)", ph="https://alugueportodegalinhas...")
+            + frow(fi("nome","Nombre propiedad","text","Capri Residence 202"),
+                   fi("distancia","Distancia al mar","text","80m"))
+            + frow(fi("quartos","Cuartos","number","1","min='0' max='20'"),
+                   fi("banheiros","Ba\xf1os","number","1","min='0' max='20'"),
+                   fi("hospedes","Personas","number","2","min='1' max='30'"))
+            + fi("amenidades","Amenidades (separadas por coma)","text","Wi-Fi, A/C, Piscina")
+            + "<div class='sep'></div>"
+            + frow(fi("preco_noche","Precio/noche R$","number","400",
+                      "id='pnoche"+sfx+"' min='0' oninput='calcNP(\""+sfx+"\",\"base\")'"),
+                   fi("n_noites","N\xb0 diarias","number","5",
+                      "id='nnoites"+sfx+"' min='1' max='365' oninput='calcNP(\""+sfx+"\",\"base\")'"))
+            + fi("taxa_limpeza","Tasa de limpieza R$","number","0",
+                 "id='tlimpeza"+sfx+"' min='0' oninput='calcNP(\""+sfx+"\",\"base\")'")
+            + "<div class='sep'></div>"
+            + frow(fi("preco_sugerido","Total sugerido R$ <small style='color:#aaa'>(editable)</small>","number","0",
+                      "id='psugerido"+sfx+"' class='inp-hl' min='0' step='1' oninput='calcNP(\""+sfx+"\",\"sug\")'"),
+                   fi("margen_pct","Margen %","number","25",
+                      "id='mpct"+sfx+"' min='0' oninput='calcNP(\""+sfx+"\",\"pct\")' step='1'"))
+            + fi("ganancia_r","Ganancia R$","number","0",
+                 "id='ganancia"+sfx+"' class='inp-green' min='0' step='1' oninput='calcNP(\""+sfx+"\",\"gan\")'")
+            + "<input type='hidden' id='ptotal"+sfx+"' name='preco_total"+sfx+"' value=''>"
+            + "<div class='sep'></div>"
+            + frow(fi("reserva_anticipo","Anticipo %","number","50","min='0' max='100'"),
+                   fi("saldo_plazo","Saldo antes del check-in","text","15 d\xedas"))
+            + fi("cond_extra","Nota libre en condiciones","text","Incluye ropa de cama...")
+            + fps_html
+            + "<div class='sep'></div>"
+            + fi("mapa_url","URL Google Maps","url","https://maps.google.com/...")
+            + fi("observaciones","Observaciones para el cliente","text","Check-in 14hs...")
+            + "<div class='sep'></div>"
+            + "<div class='field'><label class='lbl'>Fotos (hasta 5)</label>"
+            + fotos_html + "</div>"
+            + "</div>"
+        )
+
+    css_np = """
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh;padding-bottom:30px}
+.header{background:#87A286;padding:16px;text-align:center}
+.logo{color:#fff;font-size:17px;font-weight:300;letter-spacing:4px}
+.logo-sub{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:2px}
+.card{background:#fff;border-radius:14px;margin:12px;padding:18px;box-shadow:0 2px 14px rgba(0,0,0,.07)}
+h2{font-size:12px;font-weight:700;color:#87A286;margin-bottom:14px;text-transform:uppercase;letter-spacing:1px}
+.field{margin-bottom:11px}
+label.lbl{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:#87A286;margin-bottom:4px}
+input[type=text],input[type=number],input[type=url],input[type=date],textarea,select{width:100%;padding:10px 12px;border:1.5px solid #CDC6C3;border-radius:9px;font-size:15px;color:#3D3D3D;background:#fff;outline:none;font-family:inherit}
+input:focus,textarea:focus,select:focus{border-color:#87A286}
+.row{display:flex;gap:8px}.row .field{flex:1;min-width:0}
+.sep{height:1px;background:#EDE9E3;margin:10px 0}
+.inp-hl{border-color:#87A286!important;background:#f0f7f0!important;font-weight:700}
+.inp-green{color:#2e7d32!important;font-weight:600}
+.pago-opts{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.pago-opt{display:flex;align-items:center;gap:5px;font-size:13px;background:#EDE9E3;padding:6px 10px;border-radius:20px;cursor:pointer}
+.pago-opt input{width:15px;height:15px;accent-color:#87A286}
+.noches-badge{background:#e8f5e9;border-radius:9px;padding:10px 12px;font-size:15px;font-weight:700;color:#2e7d32;border:1.5px solid #c8e6c9}
+.wa-row{display:flex;gap:8px;align-items:flex-end}
+.wa-sel{width:100px;flex-shrink:0}
+.btn-add-opt{display:block;margin:0 12px 12px;border:2px dashed #CDC6C3;border-radius:12px;padding:14px;text-align:center;color:#87A286;font-size:14px;font-weight:600;cursor:pointer;background:#fff}
+.btn-enviar{display:block;margin:0 12px;padding:16px;background:#87A286;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;width:calc(100%-24px);text-align:center}
+.foto-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #EDE9E3}
+.foto-row:last-child{border-bottom:none}
+.foto-num{width:18px;text-align:center;font-size:12px;color:#CDC6C3;font-weight:700;flex-shrink:0}
+.upload-lbl{flex:1;background:#EDE9E3;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;color:#555}
+.fstatus{font-size:12px;color:#87A286;min-width:24px;text-align:right}
+"""
+    opt2_display = "display:none"
+    html_np = (
+        "<!DOCTYPE html>\n<html lang='es'>\n<head>\n"
+        "<meta charset='UTF-8'>\n"
+        "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>\n"
+        "<title>Nuevo Presupuesto \xb7 Porto Flats</title>\n"
+        "<style>"+css_np+"</style>\n</head>\n<body>\n"
+        "<div class='header'><div class='logo'>PORTO FLATS</div>"
+        "<div class='logo-sub'>Nuevo presupuesto manual</div></div>\n"
+        "<form method='POST' action='/nuevo-presupuesto'>\n"
+        # ── Datos del cliente ──
+        "<div class='card'><h2>\U0001f464 Datos del cliente</h2>"
+        "<div class='row'>"
+        "<div class='field'><label class='lbl'>Nombre</label><input type='text' name='nombre' placeholder='Juan' required></div>"
+        "<div class='field'><label class='lbl'>Apellido</label><input type='text' name='apellido' placeholder='García'></div>"
+        "</div>"
+        "<div class='row'>"
+        "<div class='field'><label class='lbl'>Fecha entrada</label><input type='text' name='fecha_entrada' placeholder='dd/mm/aaaa' id='fecha_entrada'></div>"
+        "<div class='field'><label class='lbl'>Fecha salida</label><input type='text' name='fecha_salida' placeholder='dd/mm/aaaa' id='fecha_salida' oninput='calcNoches()'></div>"
+        "</div>"
+        "<div class='row'>"
+        "<div class='field'><label class='lbl'>Noches <span style='color:#87A286'>(auto)</span></label>"
+        "<div class='noches-badge' id='noches-badge'>—</div>"
+        "<input type='hidden' name='noites' id='noites_hidden'></div>"
+        "<div class='field'><label class='lbl'>Personas</label><input type='number' name='personas' placeholder='2' min='1' max='30'></div>"
+        "</div>"
+        "<div class='field'><label class='lbl'>Notas internas (no se env\xedan al cliente)</label>"
+        "<input type='text' name='notas_internas' placeholder='Familia con ni\xf1os, prefiere piscina...'></div>"
+        "</div>\n"
+        # ── Contacto ──
+        "<div class='card'><h2>\U0001f4f2 Contacto WhatsApp</h2>"
+        "<div class='wa-row'>"
+        "<div class='field wa-sel'><label class='lbl'>País</label>"
+        "<select name='pais'>"
+        "<option value='BR'>🇧🇷 +55</option>"
+        "<option value='AR'>🇦🇷 +549</option>"
+        "<option value='US'>🇺🇸 +1</option>"
+        "</select></div>"
+        "<div class='field' style='flex:1'><label class='lbl'>Número (sin código de país)</label>"
+        "<input type='text' name='whatsapp_num' placeholder='81 9 1234-5678' required></div>"
+        "</div></div>\n"
+        # ── Opción 1 ──
+        + _opt_fields("_0", "\U0001f3e0 Opci\xf3n 1")
+        # ── Botón agregar opción 2 ──
+        + "<div class='btn-add-opt' onclick='showOpt2()'>+ Agregar opci\xf3n 2 (opcional)</div>\n"
+        # ── Opción 2 (oculta) ──
+        + "<div id='opt2-block' style='"+opt2_display+"'>"
+        + _opt_fields("_1", "\U0001f3e0 Opci\xf3n 2")
+        + "<div style='text-align:center;margin:0 12px 8px'><button type='button' onclick='hideOpt2()' "
+          "style='background:none;border:none;color:#aaa;font-size:13px;cursor:pointer'>✕ Quitar opci\xf3n 2</button></div>"
+        + "</div>\n"
+        # ── Botón enviar ──
+        + "<button type='submit' class='btn-enviar'>\U0001f4e4 Enviar propuesta por WhatsApp</button>\n"
+        + "</form>\n"
+        "<script>\n"
+        "function calcNoches(){\n"
+        "  const a=document.getElementById('fecha_entrada').value;\n"
+        "  const b=document.getElementById('fecha_salida').value;\n"
+        "  const badge=document.getElementById('noches-badge');\n"
+        "  const hid=document.getElementById('noites_hidden');\n"
+        "  function parseDate(s){\n"
+        "    const p=s.split('/');if(p.length===3)return new Date(p[2],p[1]-1,p[0]);\n"
+        "    return new Date(s);\n"
+        "  }\n"
+        "  if(!a||!b){badge.textContent='—';hid.value='';return;}\n"
+        "  const diff=Math.round((parseDate(b)-parseDate(a))/(1000*60*60*24));\n"
+        "  if(diff>0){badge.textContent=diff+' noches';hid.value=diff;}\n"
+        "  else{badge.textContent='—';hid.value='';}\n"
+        "}\n"
+        "document.getElementById('fecha_entrada').addEventListener('input',calcNoches);\n"
+        "function showOpt2(){document.getElementById('opt2-block').style.display='block';this.style.display='none';}\n"
+        "function hideOpt2(){document.getElementById('opt2-block').style.display='none';"
+        "document.querySelector('.btn-add-opt').style.display='block';}\n"
+        "function calcNP(sfx,c){\n"
+        "  const nc=parseFloat(document.getElementById('pnoche'+sfx).value)||0;\n"
+        "  const nn=parseInt(document.getElementById('nnoites'+sfx).value)||1;\n"
+        "  const lp=parseFloat(document.getElementById('tlimpeza'+sfx).value)||0;\n"
+        "  const base=nc*nn;\n"
+        "  if(c==='pct'){\n"
+        "    const pct=parseFloat(document.getElementById('mpct'+sfx).value)||0;\n"
+        "    const gan=Math.round(base*pct/100);\n"
+        "    document.getElementById('ganancia'+sfx).value=gan;\n"
+        "    document.getElementById('psugerido'+sfx).value=Math.round(base+gan+lp);\n"
+        "  }else if(c==='sug'){\n"
+        "    const sug=parseFloat(document.getElementById('psugerido'+sfx).value)||0;\n"
+        "    const gan=Math.round(sug-base-lp);\n"
+        "    document.getElementById('ganancia'+sfx).value=gan;\n"
+        "    if(base>0)document.getElementById('mpct'+sfx).value=Math.round(gan/base*100);\n"
+        "  }else if(c==='gan'){\n"
+        "    const gan=parseFloat(document.getElementById('ganancia'+sfx).value)||0;\n"
+        "    document.getElementById('psugerido'+sfx).value=Math.round(base+gan+lp);\n"
+        "    if(base>0)document.getElementById('mpct'+sfx).value=Math.round(gan/base*100);\n"
+        "  }else{\n"
+        "    const pct=parseFloat(document.getElementById('mpct'+sfx).value)||25;\n"
+        "    const gan=Math.round(base*pct/100);\n"
+        "    document.getElementById('ganancia'+sfx).value=gan;\n"
+        "    document.getElementById('psugerido'+sfx).value=Math.round(base+gan+lp);\n"
+        "  }\n"
+        "  document.getElementById('ptotal'+sfx).value=Math.round(base+lp);\n"
+        "}\n"
+        "async function uploadFoto(sfx,input,fi){\n"
+        "  const st=document.getElementById('fst'+sfx+'-'+fi);\n"
+        "  const ur=document.getElementById('furl'+sfx+'-'+fi);\n"
+        "  const file=input.files[0];if(!file)return;\n"
+        "  st.textContent='…';\n"
+        "  const fd=new FormData();fd.append('file',file);\n"
+        "  try{\n"
+        "    const r=await fetch('/upload-foto',{method:'POST',body:fd});\n"
+        "    const j=await r.json();\n"
+        "    if(j.ok){ur.value=j.url;st.textContent='✅';}\n"
+        "    else{st.textContent='❌';}\n"
+        "  }catch(e){st.textContent='❌';}\n"
+        "}\n"
+        "function uploadFoto_0(input,fi){uploadFoto('_0',input,fi);}\n"
+        "function uploadFoto_1(input,fi){uploadFoto('_1',input,fi);}\n"
+        "</script>\n</body>\n</html>"
+    )
+    return Response(html_np.encode('utf-8'), content_type="text/html; charset=utf-8")
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
