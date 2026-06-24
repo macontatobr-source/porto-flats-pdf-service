@@ -2191,7 +2191,7 @@ def nuevo_presupuesto():
             "<div class='foto-row foto-empty' id='fr"+sfx+"-"+str(fi2)+"'>"
             "<span class='foto-num'>"+str(fi2)+"</span>"
             "<label class='upload-lbl'>"
-            "<input type='file' accept='image/*' onchange='uploadFoto"+sfx.replace(\"-\",\"\")+
+            "<input type='file' accept='image/*' onchange='uploadFoto"+sfx.replace("-","")+
             "(this,"+str(fi2)+")' style='display:none'>&#128247; Foto "+str(fi2)+"</label>"
             "<span class='fstatus' id='fst"+sfx+"-"+str(fi2)+"'></span>"
             "<input type='hidden' name='foto"+str(fi2)+"_up"+sfx+"' id='furl"+sfx+"-"+str(fi2)+"' value=''></div>"
