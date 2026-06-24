@@ -1303,12 +1303,18 @@ def dashboard():
         banheiros = opt.get("banheiros", opt.get("banos",     ""))
         hospedes  = opt.get("hospedes",  opt.get("personas",  ""))
         amenidades = opt.get("amenidades", "")
-        preco_raw = opt.get("preco_total", opt.get("total_brl", 0))
-        try:
-            pv = float(str(preco_raw).replace(",", ".") or 0)
-            preco_disp = "R$ " + str("{:,}".format(int(pv * 1.25))).replace(",", ".")
-        except Exception:
-            preco_disp = ""
+        url_anuncio = opt.get("url", "")
+        # Precio
+        try: pv  = float(str(opt.get("preco_total", opt.get("total_brl", 0))).replace(",",".") or 0)
+        except: pv = 0
+        try: taxa_v = float(str(opt.get("taxa_limpeza", 0)).replace(",",".") or 0)
+        except: taxa_v = 0
+        try: noche_v = float(str(opt.get("preco_noche","")).replace(",",".") or 0)
+        except: noche_v = 0
+        try: sug_v = float(str(opt.get("preco_sugerido","")).replace(",",".") or 0)
+        except: sug_v = 0
+        if sug_v == 0 and pv > 0: sug_v = round(pv * 1.25)
+        margen_v = max(0, round(sug_v - pv)) if sug_v and pv else 0
         fotos = []
         for fi in range(1, 11):
             u = opt.get("foto"+str(fi)+"_up","") or opt.get("foto"+str(fi),"") or opt.get("f"+str(fi),"")
@@ -1320,6 +1326,14 @@ def dashboard():
         if banheiros: fp.append("\U0001f6bf " + str(banheiros) + " bano" + ("s" if str(banheiros)!="1" else ""))
         if hospedes:  fp.append("\U0001f465 hasta " + str(hospedes))
         feats_str = " &nbsp;&middot;&nbsp; ".join(fp)
+        prows = ""
+        if noche_v > 0:  prows += "<div class='prd-row'><span>Precio base/noche</span><span>R$ "+str(int(noche_v))+"</span></div>"
+        if taxa_v  > 0:  prows += "<div class='prd-row'><span>Tarifa limpieza</span><span>R$ "+str(int(taxa_v))+"</span></div>"
+        if pv      > 0:  prows += "<div class='prd-row'><span>Total estadia (costo)</span><span>R$ "+str(int(pv))+"</span></div>"
+        if sug_v   > 0:  prows += "<div class='prd-row prd-sug'><span>Precio sugerido al cliente</span><span>R$ "+str(int(sug_v))+"</span></div>"
+        if margen_v > 0: prows += "<div class='prd-row prd-mg'><span>Margen estimado</span><span>R$ "+str(int(margen_v))+"</span></div>"
+        price_html = ("<div class='price-detail'>"+prows+"</div>" if prows else "")
+        url_html = ("<a href='"+url_anuncio+"' target='_blank' class='url-anuncio'>\U0001f517 Ver anuncio original</a>" if url_anuncio else "")
         parts = [
             '<div class="opt-card" id="card-'+str(i)+'">',
             '<div class="card-top"><label class="chk-wrap">',
@@ -1331,9 +1345,10 @@ def dashboard():
             ('<div class="opt-loc">\U0001f4cd '+distancia+'</div>' if distancia else ""),
             ('<div class="opt-feats">'+feats_str+'</div>' if feats_str else ""),
             ('<div class="opt-amenids">'+amenidades+'</div>' if amenidades else ""),
-            ('<div class="opt-price">'+preco_disp+'</div>' if preco_disp else ""),
+            price_html,
+            url_html,
             '</div>',
-            '<a href="/editar?row='+str(row)+'&idx='+str(i)+'" class="btn-editar">✏️ Editar propuesta</a>',
+            '<a href="/editar?row='+str(row)+'&amp;idx='+str(i)+'" class="btn-editar">✏️ Editar propuesta</a>',
             '</div>'
         ]
         return "".join(parts)
@@ -1372,6 +1387,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .btn-enviar:disabled{background:#CDC6C3;cursor:not-allowed}
 .msg-box{text-align:center;padding:9px;font-size:13px;border-radius:8px;margin-top:8px;display:none}
 .msg-ok{background:#e8f5e9;color:#2e7d32}.msg-err{background:#ffebee;color:#c62828}
+.price-detail{background:#EDE9E3;border-radius:10px;padding:2px 12px;margin:10px 0 4px}
+.prd-row{display:flex;justify-content:space-between;padding:7px 0;font-size:12px;color:#555;border-bottom:1px solid rgba(0,0,0,.06)}
+.prd-row:last-child{border-bottom:none}
+.prd-sug{font-weight:700;color:#87A286;font-size:13px}
+.prd-mg{color:#2e7d32}
+.url-anuncio{display:block;margin:6px 0 4px;font-size:12px;color:#4a90d9;text-decoration:none;padding:0 2px}
 """
     subhead_html = ("<div class='subhead'><span>"+resumen+"</span><span style='color:#87A286;font-size:12px'>fila "+str(row)+"</span></div>"
                     if resumen else "")
@@ -1430,7 +1451,9 @@ def editar():
             opciones.append({})
         opt = opciones[idx]
         for field in ["nome", "distancia", "quartos", "banheiros", "hospedes",
-                      "amenidades", "preco_total", "taxa_limpeza", "mapa_url", "observaciones"]:
+                      "amenidades", "preco_total", "taxa_limpeza", "mapa_url", "observaciones",
+                      "preco_noche", "n_noites", "margen_pct", "preco_sugerido", "ganancia_r",
+                      "forma_pago", "reserva_anticipo", "saldo_plazo"]:
             val = request.form.get(field)
             if val is not None:
                 opt[field] = val
@@ -1454,6 +1477,7 @@ def editar():
         opciones = json.loads(rd.get("opciones_json", "[]") or "[]")
     except Exception:
         opciones = []
+    noites_lead = rd.get("noites", "")
     opt        = opciones[idx] if idx < len(opciones) else {}
     nome       = opt.get("nome",        opt.get("Title", ""))
     distancia  = opt.get("distancia",   "")
@@ -1465,6 +1489,27 @@ def editar():
     limpeza    = opt.get("taxa_limpeza","")
     mapa_url   = opt.get("mapa_url",    "")
     observ     = opt.get("observaciones","")
+    preco_noche   = opt.get("preco_noche",   "")
+    n_noites_opt  = opt.get("n_noites",      str(noites_lead))
+    margen_pct    = opt.get("margen_pct",    "25")
+    preco_sugerido = opt.get("preco_sugerido","")
+    ganancia_r    = opt.get("ganancia_r",    "")
+    # Compute missing values
+    try:
+        pv_ed = float(str(preco).replace(",",".") or 0)
+        taxa_ed = float(str(limpeza).replace(",",".") or 0)
+        nn_ed = int(str(n_noites_opt or noites_lead or 1))
+    except Exception:
+        pv_ed = taxa_ed = 0; nn_ed = 1
+    if not preco_noche and pv_ed > 0 and nn_ed > 0:
+        preco_noche = str(round((pv_ed - taxa_ed) / nn_ed))
+    if not preco_sugerido and pv_ed > 0:
+        preco_sugerido = str(round(pv_ed * (1 + int(margen_pct or 25)/100)))
+    if not ganancia_r and pv_ed > 0 and preco_sugerido:
+        ganancia_r = str(round(float(preco_sugerido) - pv_ed))
+    forma_pago     = opt.get("forma_pago",      "")
+    reserva_anticipo = opt.get("reserva_anticipo","50")
+    saldo_plazo    = opt.get("saldo_plazo",     "15 días")
 
     foto_rows = ""
     for fi in range(1, 11):
@@ -1520,6 +1565,12 @@ textarea{resize:vertical;min-height:60px}
 .btn-guardar{display:block;width:100%;padding:15px;background:#87A286;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;margin-top:4px}
 .btn-volver{display:block;text-align:center;padding:11px;color:#87A286;text-decoration:none;font-size:14px;margin:4px 14px}
 .tip{font-size:11px;color:#999;margin-top:4px}
+.sep{height:1px;background:#EDE9E3;margin:12px 0}
+.inp-hl{border-color:#87A286!important;background:#f0f7f0!important;font-weight:700}
+.inp-green{color:#2e7d32!important;font-weight:600}
+.pago-opts{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.pago-opt{display:flex;align-items:center;gap:6px;font-size:14px;color:#3D3D3D;cursor:pointer;background:#EDE9E3;padding:7px 12px;border-radius:20px}
+.pago-opt input{width:16px;height:16px;accent-color:#87A286;cursor:pointer}
 """
     html_ed = (
         "<!DOCTYPE html>\n<html lang='es'>\n<head>\n"
@@ -1548,12 +1599,42 @@ textarea{resize:vertical;min-height:60px}
         "</div>\n"
         "<div class='card'><h2>\U0001f4b0 Precio</h2>\n"
         "<div class='row'>"
-        "<div class='field'><label class='lbl'>Total R$</label>"
-        "<input type='number' name='preco_total' value='"+str(preco)+"' step='10' min='0' placeholder='2200'>"
-        "<p class='tip'>El margen se aplica al precio base al mostrar</p></div>"
-        "<div class='field'><label class='lbl'>Limpieza R$</label>"
-        "<input type='number' name='taxa_limpeza' value='"+str(limpeza)+"' step='10' min='0' placeholder='300'></div>"
-        "</div></div>\n"
+        "<div class='field'><label class='lbl'>Valor por d\xeda R$</label>"
+        "<input type='number' id='preco_noche' name='preco_noche' value='"+str(preco_noche)+"' step='10' min='0' placeholder='600' oninput='calcP(\"base\")'></div>"
+        "<div class='field'><label class='lbl'>N\xb0 Diarias</label>"
+        "<input type='number' id='n_noites' name='n_noites' value='"+str(n_noites_opt or noites_lead or 1)+"' min='1' max='365' oninput='calcP(\"base\")'></div>"
+        "</div>"
+        "<div class='field'><label class='lbl'>Tasa de limpieza R$</label>"
+        "<input type='number' id='taxa_limpeza' name='taxa_limpeza' value='"+str(limpeza)+"' step='10' min='0' placeholder='200' oninput='calcP(\"base\")'></div>"
+        "<div class='sep'></div>"
+        "<div class='row'>"
+        "<div class='field'><label class='lbl'>Total sugerido R$ <small style='color:#aaa'>(editable)</small></label>"
+        "<input type='number' id='preco_sugerido' name='preco_sugerido' value='"+str(preco_sugerido)+"' step='10' min='0' class='inp-hl' oninput='calcP(\"sug\")'></div>"
+        "</div>"
+        "<div class='row'>"
+        "<div class='field'><label class='lbl'>Margen ganancia %</label>"
+        "<input type='number' id='margen_pct' name='margen_pct' value='"+str(margen_pct)+"' step='1' min='0' max='500' oninput='calcP(\"pct\")'></div>"
+        "<div class='field'><label class='lbl'>Ganancia R$</label>"
+        "<input type='number' id='ganancia_r' name='ganancia_r' value='"+str(ganancia_r)+"' step='10' class='inp-green' oninput='calcP(\"gan\")'></div>"
+        "</div>"
+        "<input type='hidden' id='preco_total_h' name='preco_total' value='"+str(preco)+"'>"
+        "</div>\n"
+        "<div class='card'><h2>\U0001f4b3 Condiciones de pago</h2>\n"
+        "<div class='field'><label class='lbl'>Forma de pago</label>"
+        "<div class='pago-opts'>"
+        "<label class='pago-opt'><input type='checkbox' name='fp_efectivo' value='1'"+(" checked" if "Efectivo" in forma_pago else "")+"> Efectivo</label>"
+        "<label class='pago-opt'><input type='checkbox' name='fp_transf' value='1'"+(" checked" if "Transferencia" in forma_pago else "")+"> Transferencia</label>"
+        "<label class='pago-opt'><input type='checkbox' name='fp_pix' value='1'"+(" checked" if "PIX" in forma_pago else " checked")+"> PIX</label>"
+        "<label class='pago-opt'><input type='checkbox' name='fp_cripto' value='1'"+(" checked" if "Cripto" in forma_pago else "")+"> Cripto</label>"
+        "<label class='pago-opt'><input type='checkbox' name='fp_tarjeta' value='1'"+(" checked" if "Tarjeta" in forma_pago else "")+"> Tarjeta cr\xe9d/d\xe9b</label>"
+        "</div></div>"
+        "<div class='field' style='margin-top:12px'><label class='lbl'>Reserva confirmada con anticipo del</label>"
+        "<div style='display:flex;align-items:center;gap:8px;margin-top:6px'>"
+        "<input type='number' name='reserva_anticipo' value='"+str(reserva_anticipo)+"' min='0' max='100' style='width:70px;padding:8px 10px;border:1.5px solid #CDC6C3;border-radius:9px;font-size:15px'>"
+        "<span style='font-size:15px;color:#3D3D3D'>%</span></div></div>"
+        "<div class='field' style='margin-top:12px'><label class='lbl'>Saldo debe abonarse antes del check-in</label>"
+        "<input type='text' name='saldo_plazo' value='"+str(saldo_plazo)+"' placeholder='15 d\xedas' style='margin-top:6px'></div>"
+        "</div>\n"
         "<div class='card'><h2>\U0001f4cd Mapa</h2>\n"
         "<div class='field'><label class='lbl'>URL Google Maps</label>"
         "<input type='url' name='mapa_url' value='"+mapa_url+"' placeholder='https://maps.google.com/...'></div>"
@@ -1567,6 +1648,41 @@ textarea{resize:vertical;min-height:60px}
         "<div class='card'><button type='submit' class='btn-guardar'>\U0001f4be Guardar y volver al dashboard</button></div>\n"
         "</form>\n"
         "<script>\n"
+        "function calcP(c){\n"
+        "  const nc=parseFloat(document.getElementById('preco_noche').value)||0;\n"
+        "  const nn=parseInt(document.getElementById('n_noites').value)||1;\n"
+        "  const lp=parseFloat(document.getElementById('taxa_limpeza').value)||0;\n"
+        "  const base=nc*nn;\n"
+        "  if(c==='pct'){\n"
+        "    const pct=parseFloat(document.getElementById('margen_pct').value)||0;\n"
+        "    const gan=Math.round(base*pct/100);\n"
+        "    document.getElementById('ganancia_r').value=gan;\n"
+        "    document.getElementById('preco_sugerido').value=Math.round(base+gan+lp);\n"
+        "  }else if(c==='sug'){\n"
+        "    const sug=parseFloat(document.getElementById('preco_sugerido').value)||0;\n"
+        "    const gan=Math.round(sug-base-lp);\n"
+        "    document.getElementById('ganancia_r').value=gan;\n"
+        "    if(base>0)document.getElementById('margen_pct').value=Math.round(gan/base*100);\n"
+        "  }else if(c==='gan'){\n"
+        "    const gan=parseFloat(document.getElementById('ganancia_r').value)||0;\n"
+        "    document.getElementById('preco_sugerido').value=Math.round(base+gan+lp);\n"
+        "    if(base>0)document.getElementById('margen_pct').value=Math.round(gan/base*100);\n"
+        "  }else{\n"
+        "    const pct=parseFloat(document.getElementById('margen_pct').value)||25;\n"
+        "    const gan=Math.round(base*pct/100);\n"
+        "    document.getElementById('ganancia_r').value=gan;\n"
+        "    document.getElementById('preco_sugerido').value=Math.round(base+gan+lp);\n"
+        "  }\n"
+        "  document.getElementById('preco_total_h').value=Math.round(base+lp);\n"
+        "}\n"
+        "// Build forma_pago before submit\n"
+        "document.addEventListener('submit',function(e){\n"
+        "  const fps=['fp_efectivo:Efectivo','fp_transf:Transferencia','fp_pix:PIX','fp_cripto:Cripto','fp_tarjeta:Tarjeta'];\n"
+        "  const chosen=fps.filter(f=>document.querySelector('[name='+f.split(':')[0]+']:checked')).map(f=>f.split(':')[1]);\n"
+        "  let hi=document.getElementById('fp_hidden');\n"
+        "  if(!hi){hi=document.createElement('input');hi.type='hidden';hi.name='forma_pago';hi.id='fp_hidden';e.target.appendChild(hi);}\n"
+        "  hi.value=chosen.join(' · ');\n"
+        "});\n"
         "async function uploadFoto(input,fi){\n"
         "  const st=document.getElementById('fst-'+fi);\n"
         "  const ur=document.getElementById('furl_'+fi);\n"
@@ -1630,6 +1746,43 @@ def enviar_propuesta():
     _evo_send_text(whatsapp, msg)
     _sheets_update(row, "estado", "Enviado al cliente")
     return jsonify({"ok": True, "url": short_url, "numero": whatsapp})
+
+
+def _propuesta_pol(opts):
+    """Genera la sección de política de cancelación dinámica + modal T&C."""
+    first_opt = opts[0][1] if opts else {}
+    anticipo  = str(first_opt.get("reserva_anticipo", "50"))
+    saldo_pl  = str(first_opt.get("saldo_plazo",      "15 días"))
+    forma_pago = str(first_opt.get("forma_pago",      "Transferencia · PIX"))
+    if not forma_pago.strip():
+        forma_pago = "Transferencia · PIX"
+    pol_items = (
+        "<div class='pol-item'>✅ Reserva confirmada con <strong>anticipo del "+anticipo+"%</strong></div>"
+        "<div class='pol-item'>\U0001f4c5 Saldo debe abonarse <strong>"+saldo_pl+"</strong> antes del check-in</div>"
+        "<div class='pol-item'>\U0001f504 Cancelaci\xf3n +30 d\xedas: reembolso del anticipo (menos tasas)</div>"
+        "<div class='pol-item'>❌ Cancelaci\xf3n -30 d\xedas: sin reembolso</div>"
+        "<div class='pol-item'>\U0001f4b3 Forma de pago: "+forma_pago+"</div>"
+    )
+    modal = (
+        "<div id='modal-tc' onclick='if(event.target===this)closeTc()' style='"
+        "display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:999;align-items:center;justify-content:center;padding:16px'>"
+        "<div style='background:#fff;border-radius:16px;padding:24px;max-width:480px;width:100%;max-height:80vh;overflow-y:auto'>"
+        "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:16px'>"
+        "<span style='font-weight:700;font-size:16px'>T\xe9rminos y condiciones</span>"
+        "<button onclick='closeTc()' style='background:none;border:none;font-size:22px;cursor:pointer;color:#888'>✕</button></div>"
+        "<div style='font-size:13px;line-height:1.8;color:#555'>"
+        "<p>✅ <strong>Reserva:</strong> Se confirma con el pago del anticipo del "+anticipo+"%.</p>"
+        "<p>\U0001f4c5 <strong>Saldo:</strong> "+saldo_pl+" antes del check-in.</p>"
+        "<p>\U0001f504 <strong>Cancelaci\xf3n con m\xe1s de 30 d\xedas:</strong> Reembolso del anticipo menos gastos de gesti\xf3n.</p>"
+        "<p>❌ <strong>Cancelaci\xf3n con menos de 30 d\xedas:</strong> Sin reembolso.</p>"
+        "<p>\U0001f4b3 <strong>Formas de pago:</strong> "+forma_pago+".</p>"
+        "<p style='margin-top:12px;font-size:12px;color:#aaa'>Porto Flats \xb7 Porto de Galinhas, Pernambuco, Brasil</p>"
+        "</div></div></div>"
+    )
+    return (
+        "<div class='pol-card'><div class='pol-title'>Condiciones de reserva</div>"
+        + pol_items + "</div>\n" + modal
+    )
 
 
 # ── /propuesta ────────────────────────────────────────────────────────────────
@@ -1821,21 +1974,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         + "<div class='cta-todas np'><label>"
           "<input type='checkbox' id='chk-todas' onchange='toggleTodas()'>"
           "<span>✨ \xa1Me interesan todas las opciones!</span></label></div>\n"
-        + "<div class='pol-card'><div class='pol-title'>Pol\xedtica de cancelaci\xf3n</div>"
-          "<div class='pol-item'>✅ Reserva confirmada con <strong>anticipo del 50%</strong></div>"
-          "<div class='pol-item'>\U0001f4c5 Saldo abonado <strong>15 d\xedas antes</strong> del check-in</div>"
-          "<div class='pol-item'>\U0001f504 Cancelaci\xf3n +30 d\xedas: reembolso del anticipo (menos tasas)</div>"
-          "<div class='pol-item'>❌ Cancelaci\xf3n -30 d\xedas: sin reembolso</div>"
-          "<div class='pol-item'>\U0001f4b3 Pago: transferencia bancaria o PIX</div></div>\n"
+        + _propuesta_pol(opts)
         + "<div class='footer-bar np'>"
           "<button class='btn-confirm' id='btn-confirm' disabled onclick='confirmar()'>"
           "✅ Confirmar selecci\xf3n</button>"
-          "<div class='accept-txt'>Al confirmar acept\xe1s nuestra pol\xedtica de cancelaci\xf3n.</div>"
+          "<div class='accept-txt'>Al confirmar acept\xe1s nuestra <a onclick='openTc()' style='color:#87A286;text-decoration:underline;cursor:pointer'>pol\xedtica de cancelaci\xf3n</a>.</div>"
           "<div class='msg-box' id='msg-box'></div></div>\n"
         + "<div class='footer np'>Porto Flats \xb7 Alquileres temporarios<br>"
           "Porto de Galinhas \xb7 Pernambuco \xb7 Brasil<br>"
           "<small>Esta propuesta fue preparada especialmente para vos</small></div>\n"
         + "<script>\nconst ROW='"+str(row)+"';\n"
+          "function openTc(){document.getElementById('modal-tc').style.display='flex';}\n"
+          "function closeTc(){document.getElementById('modal-tc').style.display='none';}\n"
           "function updateConfirm(){const any=document.querySelectorAll('.opt-chk:checked,#chk-todas:checked').length>0;document.getElementById('btn-confirm').disabled=!any;}\n"
           "function toggleTodas(){const v=document.getElementById('chk-todas').checked;document.querySelectorAll('.opt-chk').forEach(c=>{c.checked=v;});updateConfirm();}\n"
           "async function confirmar(){\n"
