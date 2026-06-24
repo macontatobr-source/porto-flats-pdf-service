@@ -34,8 +34,10 @@ def _evo_send_text(numero, text):
     try:
         http.post(url, json={"number": str(numero), "text": text},
                   headers=_evo_headers(), timeout=30)
+        return True
     except Exception as e:
         print(f"[EVO text error] {e}")
+        return False
 
 def _evo_send_pdf(numero, pdf_b64, filename, caption=""):
     url = f"{EVO_URL}/message/sendMedia/{EVO_INST}"
@@ -1232,7 +1234,7 @@ def _sheets_append_row(data_dict):
         # Contar filas ANTES del append para calcular el número correcto
         rows_before = len(ws.get_all_values())
         row_vals = [str(data_dict.get(h, "")) for h in headers]
-        ws.append_row(row_vals, value_input_option="USER_ENTERED")
+        ws.append_row(row_vals, value_input_option="RAW")
         return rows_before + 1  # la nueva fila está una después de las existentes
     except Exception as e:
         print(f"[Sheets] append_row error: {e}")
