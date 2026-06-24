@@ -1627,7 +1627,7 @@ textarea{resize:vertical;min-height:60px}
         "<div class='field'><label class='lbl'>Margen ganancia %</label>"
         "<input type='number' id='margen_pct' name='margen_pct' value='"+str(margen_pct)+"' step='1' min='0' max='500' oninput='calcP(\"pct\")'></div>"
         "<div class='field'><label class='lbl'>Ganancia R$</label>"
-        "<input type='number' id='ganancia_r' name='ganancia_r' value='"+str(ganancia_r)+"' step='10' class='inp-green' oninput='calcP(\"gan\")'></div>"
+        "<input type='number' id='ganancia_r' name='ganancia_r' value='"+str(ganancia_r)+"' step='1' class='inp-green' oninput='calcP(\"gan\")'></div>"
         "</div>"
         "<input type='hidden' id='preco_total_h' name='preco_total' value='"+str(preco)+"'>"
         "</div>\n"
