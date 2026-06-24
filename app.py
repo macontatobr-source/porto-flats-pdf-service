@@ -1955,19 +1955,12 @@ def propuesta():
             price_html = "<div class='card'><div class='sec-title'>Precio estimado</div><div class='pr-table'>"+rows_p+"</div></div>"
         map_html = ""
         if mapa_url:
-            embed_url = (mapa_url + ("&" if "?" in mapa_url else "?") + "output=embed"
-                         if "google.com/maps" in mapa_url and "output=embed" not in mapa_url
-                         else mapa_url)
             map_html = ("<div class='card np'><div class='sec-title'>\U0001f4cd Ubicaci\xf3n</div>"
-                        "<div class='maps-wrap'><iframe src='"+embed_url+"' width='100%' height='200' frameborder='0' "
-                        "style='border:0;border-radius:12px;display:block' allowfullscreen loading='lazy'></iframe></div>"
                         "<a href='"+mapa_url+"' class='btn btn-maps' target='_blank'>\U0001f5fa Ver en Google Maps</a></div>")
         else:
             loc_q = urlquote(nome + ", Porto de Galinhas, Pernambuco, Brasil")
             map_html = ("<div class='card np'><div class='sec-title'>\U0001f4cd Ubicaci\xf3n</div>"
-                        "<div class='maps-wrap'><iframe src='https://maps.google.com/maps?q="+loc_q+"&output=embed' "
-                        "width='100%' height='200' frameborder='0' style='border:0;border-radius:12px;display:block' "
-                        "allowfullscreen loading='lazy'></iframe></div></div>")
+                        "<a href='https://www.google.com/maps/search/?api=1&query="+loc_q+"' class='btn btn-maps' target='_blank'>\U0001f5fa Ver en Google Maps</a></div>")
         obs_lines = observ.replace("\r\n", "\n").replace("\r", "\n").split("\n") if observ else []
         obs_html = ("<div class='card'>"
                     + "".join("<p style='font-size:13px;color:#555;line-height:1.6;margin-bottom:4px'>&#8505;&#65039; "+ln.strip()+"</p>" for ln in obs_lines if ln.strip())
@@ -2085,7 +2078,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         + "<div class='footer np'>Porto Flats \xb7 Alquileres temporarios<br>"
           "Porto de Galinhas \xb7 Pernambuco \xb7 Brasil<br>"
           "<small>Esta propuesta fue preparada especialmente para vos</small></div>\n"
-        + "<script>\nconst ROW='"+str(row)+"';\n"
+        + "<script>\nconst ROW='"+str(row)+"';\nconst DATA_B64='"+data_b64+"';\n"
           "function openTc(){document.getElementById('modal-tc').style.display='flex';}\n"
           "function closeTc(){document.getElementById('modal-tc').style.display='none';}\n"
           "function updateConfirm(){const any=document.querySelectorAll('.opt-chk:checked,#chk-todas:checked').length>0;document.getElementById('btn-confirm').disabled=!any;}\n"
@@ -2097,8 +2090,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           "  const opts=todas?[...document.querySelectorAll('.opt-chk')].map(c=>parseInt(c.value)):[...document.querySelectorAll('.opt-chk:checked')].map(c=>parseInt(c.value));\n"
           "  if(!opts.length)return;\n"
           "  btn.disabled=true;btn.textContent='Confirmando…';msgBox.style.display='none';\n"
+          "  const body=ROW?{row:ROW,opciones_elegidas:opts}:{data_b64:DATA_B64,opciones_elegidas:opts};\n"
           "  try{\n"
-          "    const r=await fetch('/confirmar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({row:ROW,opciones_elegidas:opts})});\n"
+          "    const r=await fetch('/confirmar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});\n"
           "    const j=await r.json();\n"
           "    if(j.ok){btn.textContent='✅ \xa1Confirmado!';msgBox.textContent='\xa1Muchas gracias! Te contactamos a la brevedad.';msgBox.className='msg-box msg-ok';msgBox.style.display='block';}\n"
           "    else{msgBox.textContent='Error: '+(j.error||'intent\xe1 de nuevo');msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='✅ Confirmar selecci\xf3n';}\n"
@@ -2114,15 +2108,28 @@ def confirmar():
     """Cliente confirma opciones -> WhatsApp a Marcelo."""
     data          = request.get_json(force=True) or {}
     row           = str(data.get("row", ""))
+    db64          = str(data.get("data_b64", ""))
     opciones_eleg = data.get("opciones_elegidas", [])
-    if not row:
+    if not row and not db64:
         return jsonify({"error": "Falta row"}), 400
-    rd = _sheets_get_row(row)
-    nombre = rd.get("nombre", "") if rd else ""
-    try:
-        all_opts = json.loads(rd.get("opciones_json", "[]") or "[]") if rd else []
-    except Exception:
-        all_opts = []
+    if db64:
+        # Modo manual: decodificar payload base64
+        import base64 as _b64c, zlib as _zlc
+        try:
+            padding  = (4 - len(db64) % 4) % 4
+            raw      = _b64c.urlsafe_b64decode(db64 + "=" * padding)
+            payload  = json.loads(_zlc.decompress(raw).decode("utf-8"))
+            nombre   = payload.get("nombre", "")
+            all_opts = payload.get("opciones", [])
+        except Exception as e:
+            return jsonify({"error": "Error decodificando: "+str(e)}), 400
+    else:
+        rd = _sheets_get_row(row)
+        nombre = rd.get("nombre", "") if rd else ""
+        try:
+            all_opts = json.loads(rd.get("opciones_json", "[]") or "[]") if rd else []
+        except Exception:
+            all_opts = []
     nombres_eleg = []
     for i in opciones_eleg:
         try:
