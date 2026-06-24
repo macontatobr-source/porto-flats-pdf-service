@@ -1850,16 +1850,22 @@ def _propuesta_pol(opts):
 @app.route("/propuesta")
 def propuesta():
     """Landing multi-opcion para el cliente. ?data=BASE64&sel=0 o ?row=N&sel=0,1"""
-    import base64 as _b64
+    import base64 as _b64, zlib as _zlib
     from urllib.parse import quote as urlquote
     sel_raw  = request.args.get("sel", "")
     data_b64 = request.args.get("data", "")
+    row      = ""   # siempre definido para la JS al final
 
     if data_b64:
-        # ── Modo manual: datos codificados en el URL, sin Sheets ──
+        # ── Modo manual: datos comprimidos + codificados en el URL, sin Sheets ──
         try:
-            padding  = 4 - len(data_b64) % 4
-            payload  = json.loads(_b64.urlsafe_b64decode(data_b64 + "=" * padding).decode("utf-8"))
+            padding   = (4 - len(data_b64) % 4) % 4
+            raw_bytes = _b64.urlsafe_b64decode(data_b64 + "=" * padding)
+            try:
+                json_str = _zlib.decompress(raw_bytes).decode("utf-8")
+            except Exception:
+                json_str = raw_bytes.decode("utf-8")  # fallback sin compresión
+            payload  = json.loads(json_str)
             nombre   = payload.get("nombre", "")
             ci       = payload.get("ci", "")
             co       = payload.get("co", "")
@@ -2201,8 +2207,8 @@ def nuevo_presupuesto():
         opciones = [opt0]
         if any(opt1.values()): opciones.append(opt1)
 
-        # ── Generar URL con datos codificados (sin depender de Sheets) ──
-        import base64 as _b64
+        # ── Generar URL con datos comprimidos + codificados (sin depender de Sheets) ──
+        import base64 as _b64, zlib as _zlib
         payload_dict = {
             "nombre":  nombre_completo,
             "ci":      ci,
@@ -2210,9 +2216,8 @@ def nuevo_presupuesto():
             "noites":  noites,
             "opciones": opciones,
         }
-        data_b64 = _b64.urlsafe_b64encode(
-            json.dumps(payload_dict, ensure_ascii=False).encode("utf-8")
-        ).decode().rstrip("=")
+        json_bytes = json.dumps(payload_dict, ensure_ascii=False, separators=(",",":")).encode("utf-8")
+        data_b64 = _b64.urlsafe_b64encode(_zlib.compress(json_bytes, 9)).decode().rstrip("=")
         sel_idxs = ",".join(str(i) for i in range(len(opciones)))
         prop_url  = SERVICE_URL + "/propuesta?data=" + data_b64 + "&sel=" + sel_idxs
 
