@@ -1477,39 +1477,47 @@ def editar():
         opciones = json.loads(rd.get("opciones_json", "[]") or "[]")
     except Exception:
         opciones = []
-    noites_lead = rd.get("noites", "")
+    noites_lead = str(rd.get("noites", "") or "")
     opt        = opciones[idx] if idx < len(opciones) else {}
-    nome       = opt.get("nome",        opt.get("Title", ""))
-    distancia  = opt.get("distancia",   "")
-    quartos    = opt.get("quartos",     "")
-    banheiros  = opt.get("banheiros",   "")
-    hospedes   = opt.get("hospedes",    "")
-    amenidades = opt.get("amenidades",  "")
-    preco      = opt.get("preco_total", "")
-    limpeza    = opt.get("taxa_limpeza","")
-    mapa_url   = opt.get("mapa_url",    "")
-    observ     = opt.get("observaciones","")
-    preco_noche   = opt.get("preco_noche",   "")
-    n_noites_opt  = opt.get("n_noites",      str(noites_lead))
-    margen_pct    = opt.get("margen_pct",    "25")
-    preco_sugerido = opt.get("preco_sugerido","")
-    ganancia_r    = opt.get("ganancia_r",    "")
+    # Forzar str en todos los campos para evitar TypeError si algún valor es lista/int
+    def _s(v, default=""):
+        if v is None: return default
+        if isinstance(v, list): return ", ".join(str(x) for x in v) if v else default
+        return str(v)
+    nome       = _s(opt.get("nome",        opt.get("Title",        "")))
+    distancia  = _s(opt.get("distancia",   ""))
+    quartos    = _s(opt.get("quartos",     opt.get("cuartos",   "")))
+    banheiros  = _s(opt.get("banheiros",   opt.get("banos",     "")))
+    hospedes   = _s(opt.get("hospedes",    opt.get("personas",  "")))
+    amenidades = _s(opt.get("amenidades",  ""))
+    preco      = _s(opt.get("preco_total", opt.get("total_brl", "")))
+    limpeza    = _s(opt.get("taxa_limpeza",opt.get("limpieza_brl","")))
+    mapa_url   = _s(opt.get("mapa_url",    ""))
+    observ     = _s(opt.get("observaciones",""))
+    preco_noche   = _s(opt.get("preco_noche",   ""))
+    n_noites_opt  = _s(opt.get("n_noites",      noites_lead))
+    margen_pct    = _s(opt.get("margen_pct",    "25"))
+    preco_sugerido = _s(opt.get("preco_sugerido",""))
+    ganancia_r    = _s(opt.get("ganancia_r",    ""))
+    forma_pago     = _s(opt.get("forma_pago",      ""))
+    reserva_anticipo = _s(opt.get("reserva_anticipo","50"))
+    saldo_plazo    = _s(opt.get("saldo_plazo",     "15 días"))
     # Compute missing values
     try:
-        pv_ed = float(str(preco).replace(",",".") or 0)
-        taxa_ed = float(str(limpeza).replace(",",".") or 0)
-        nn_ed = int(str(n_noites_opt or noites_lead or 1))
+        pv_ed = float(preco.replace(",",".") or 0)
+        taxa_ed = float(limpeza.replace(",",".") or 0)
+        nn_ed = int(float(n_noites_opt or noites_lead or 1))
     except Exception:
         pv_ed = taxa_ed = 0; nn_ed = 1
-    if not preco_noche and pv_ed > 0 and nn_ed > 0:
-        preco_noche = str(round((pv_ed - taxa_ed) / nn_ed))
-    if not preco_sugerido and pv_ed > 0:
-        preco_sugerido = str(round(pv_ed * (1 + int(margen_pct or 25)/100)))
-    if not ganancia_r and pv_ed > 0 and preco_sugerido:
-        ganancia_r = str(round(float(preco_sugerido) - pv_ed))
-    forma_pago     = opt.get("forma_pago",      "")
-    reserva_anticipo = opt.get("reserva_anticipo","50")
-    saldo_plazo    = opt.get("saldo_plazo",     "15 días")
+    try:
+        if not preco_noche and pv_ed > 0 and nn_ed > 0:
+            preco_noche = str(round((pv_ed - taxa_ed) / nn_ed))
+        if not preco_sugerido and pv_ed > 0:
+            preco_sugerido = str(round(pv_ed * (1 + int(float(margen_pct or 25))/100)))
+        if not ganancia_r and pv_ed > 0 and preco_sugerido:
+            ganancia_r = str(round(float(preco_sugerido) - pv_ed))
+    except Exception:
+        pass
 
     foto_rows = ""
     for fi in range(1, 11):
