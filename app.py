@@ -1222,6 +1222,22 @@ def _sheets_update(row_number, col_name, value):
         return False
 
 
+def _sheets_append_row(data_dict):
+    """Agrega nueva fila al sheet usando los headers existentes. Retorna row number."""
+    try:
+        gc = _sheets_client()
+        if not gc: return None
+        ws = gc.open_by_key(SPREADSHEET_ID).worksheet(OPCIONES_SHEET)
+        headers = ws.row_values(1)
+        row_vals = [str(data_dict.get(h, "")) for h in headers]
+        ws.append_row(row_vals, value_input_option="USER_ENTERED")
+        all_vals = ws.get_all_values()
+        return len(all_vals)
+    except Exception as e:
+        print(f"[Sheets] append_row error: {e}")
+        return None
+
+
 # ── /last-row — número de la última fila en Opciones Pendientes ──────────────
 @app.route("/last-row")
 def last_row():
