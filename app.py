@@ -1484,6 +1484,7 @@ def editar():
         if v is None: return default
         if isinstance(v, list): return ", ".join(str(x) for x in v) if v else default
         return str(v)
+    url_anuncio_ed = _s(opt.get("url", ""))
     nome       = _s(opt.get("nome",        opt.get("Title",        "")))
     distancia  = _s(opt.get("distancia",   ""))
     quartos    = _s(opt.get("quartos",     opt.get("cuartos",   "")))
@@ -1579,6 +1580,8 @@ textarea{resize:vertical;min-height:60px}
 .pago-opts{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
 .pago-opt{display:flex;align-items:center;gap:6px;font-size:14px;color:#3D3D3D;cursor:pointer;background:#EDE9E3;padding:7px 12px;border-radius:20px}
 .pago-opt input{width:16px;height:16px;accent-color:#87A286;cursor:pointer}
+.link-anuncio{display:inline-flex;align-items:center;gap:6px;background:#EDE9E3;color:#4a90d9;text-decoration:none;font-size:13px;font-weight:600;padding:9px 14px;border-radius:10px;margin-bottom:14px;word-break:break-all}
+.link-anuncio:hover{background:#d9e8d9}
 """
     html_ed = (
         "<!DOCTYPE html>\n<html lang='es'>\n<head>\n"
@@ -1593,7 +1596,8 @@ textarea{resize:vertical;min-height:60px}
         "<input type='hidden' name='row' value='"+str(row)+"'>\n"
         "<input type='hidden' name='idx' value='"+str(idx)+"'>\n"
         "<div class='card'><h2>\U0001f3e0 Propiedad</h2>\n"
-        "<div class='field'><label class='lbl'>Nombre</label>"
+        + (("<a href='"+url_anuncio_ed+"' target='_blank' class='link-anuncio'>\U0001f517 Ver anuncio original (buscar fotos)</a>\n") if url_anuncio_ed else "")
+        + "<div class='field'><label class='lbl'>Nombre</label>"
         "<input type='text' name='nome' value='"+nome+"' placeholder='Nixxus Premium'></div>\n"
         "<div class='field'><label class='lbl'>Distancia / Ubicaci\xf3n</label>"
         "<input type='text' name='distancia' value='"+distancia+"' placeholder='40m del mar'></div>\n"
