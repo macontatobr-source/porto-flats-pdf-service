@@ -1955,12 +1955,21 @@ def propuesta():
             price_html = "<div class='card'><div class='sec-title'>Precio estimado</div><div class='pr-table'>"+rows_p+"</div></div>"
         map_html = ""
         if mapa_url:
+            embed_url = (mapa_url + ("&" if "?" in mapa_url else "?") + "output=embed"
+                         if "google.com/maps" in mapa_url and "output=embed" not in mapa_url
+                         else mapa_url)
             map_html = ("<div class='card np'><div class='sec-title'>\U0001f4cd Ubicaci\xf3n</div>"
-                        "<a href='"+mapa_url+"' class='btn btn-maps' target='_blank'>\U0001f5fa Ver en Google Maps</a></div>")
+                        "<div class='maps-wrap'><iframe src='"+embed_url+"' width='100%' height='220' frameborder='0' "
+                        "style='border:0;border-radius:12px;display:block' allowfullscreen loading='lazy'></iframe></div>"
+                        "<a href='"+mapa_url+"' style='display:block;text-align:center;font-size:13px;color:#4a90d9;margin-top:10px;text-decoration:underline' target='_blank'>\U0001f5fa Ver en Google Maps</a></div>")
         else:
             loc_q = urlquote(nome + ", Porto de Galinhas, Pernambuco, Brasil")
+            gmaps_url = "https://www.google.com/maps/search/?api=1&query=" + loc_q
             map_html = ("<div class='card np'><div class='sec-title'>\U0001f4cd Ubicaci\xf3n</div>"
-                        "<a href='https://www.google.com/maps/search/?api=1&query="+loc_q+"' class='btn btn-maps' target='_blank'>\U0001f5fa Ver en Google Maps</a></div>")
+                        "<div class='maps-wrap'><iframe src='https://maps.google.com/maps?q="+loc_q+"&output=embed' "
+                        "width='100%' height='220' frameborder='0' style='border:0;border-radius:12px;display:block' "
+                        "allowfullscreen loading='lazy'></iframe></div>"
+                        "<a href='"+gmaps_url+"' style='display:block;text-align:center;font-size:13px;color:#4a90d9;margin-top:10px;text-decoration:underline' target='_blank'>\U0001f5fa Ver en Google Maps</a></div>")
         obs_lines = observ.replace("\r\n", "\n").replace("\r", "\n").split("\n") if observ else []
         obs_html = ("<div class='card'>"
                     + "".join("<p style='font-size:13px;color:#555;line-height:1.6;margin-bottom:4px'>&#8505;&#65039; "+ln.strip()+"</p>" for ln in obs_lines if ln.strip())
