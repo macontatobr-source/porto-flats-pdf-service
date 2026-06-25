@@ -1706,7 +1706,7 @@ textarea{resize:vertical;min-height:60px}
         "</div>\n"
         "<div class='card'><h2>\U0001f4cd Mapa</h2>\n"
         "<div class='field'><label class='lbl'>URL Google Maps</label>"
-        "<input type='url' name='mapa_url' value='"+mapa_url+"' placeholder='https://maps.google.com/...'></div>"
+        "<input type='url' name='mapa_url' value='"+mapa_url+"' placeholder='https://maps.app.goo.gl/...'></div>"
         "</div>\n"
         "<div class='card'><h2>\U0001f4dd Observaciones</h2>\n"
         "<textarea name='observaciones' rows='3' placeholder='Incluye ropa de cama.'>"+observ+"</textarea>"
@@ -1960,17 +1960,42 @@ def propuesta():
             rows_p += "<div class='pr-row pr-total'><span>\U0001f4b0 Total estimado</span><span>R$ "+str(int(preco_v))+"</span></div>"
             price_html = "<div class='card'><div class='sec-title'>Precio estimado</div><div class='pr-table'>"+rows_p+"</div></div>"
         map_html = ""
-        loc_q    = urlquote(nome + ", Porto de Galinhas, Pernambuco, Brasil")
-        gmaps_fallback = "https://www.google.com/maps/search/?api=1&query=" + loc_q
-        link_url = mapa_url if mapa_url else gmaps_fallback
-        link_txt = ("<a href='"+link_url+"' style='display:block;text-align:center;"
-                    "font-size:13px;color:#4a90d9;margin-top:10px;text-decoration:underline' "
-                    "target='_blank'>\U0001f5fa Ver en Google Maps</a>")
-        # Solo usar iframe si es URL de embed oficial de Google Maps
-        is_embed = mapa_url and "google.com/maps/embed" in mapa_url
-        if is_embed:
+        import re as _re
+        loc_q        = urlquote(nome + ", Porto de Galinhas, Pernambuco, Brasil")
+        gmaps_link   = mapa_url if mapa_url else "https://www.google.com/maps/search/?api=1&query=" + loc_q
+        link_txt     = ("<a href='"+gmaps_link+"' style='display:block;text-align:center;"
+                        "font-size:13px;color:#4a90d9;margin-top:10px;text-decoration:underline' "
+                        "target='_blank'>\U0001f5fa Ver en Google Maps</a>")
+
+        def _osm_embed(url):
+            """Intenta extraer coords de URL Google Maps y armar embed OSM. Retorna src o None."""
+            resolved = url
+            # Seguir redirect para links cortos
+            if "maps.app.goo.gl" in url or "goo.gl/maps" in url:
+                try:
+                    import urllib.request as _ur2
+                    req = _ur2.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                    resolved = _ur2.urlopen(req, timeout=4).url
+                except Exception:
+                    pass
+            # Extraer lat/lng del patrón /@lat,lng o ?q=lat,lng
+            m = _re.search(r'/@(-?\d+\.\d+),(-?\d+\.\d+)', resolved)
+            if not m:
+                m = _re.search(r'[?&](?:q|ll)=(-?\d+\.\d+),(-?\d+\.\d+)', resolved)
+            if not m:
+                return None
+            lat, lng = float(m.group(1)), float(m.group(2))
+            d = 0.004
+            bbox = f"{lng-d},{lat-d},{lng+d},{lat+d}"
+            return f"https://www.openstreetmap.org/export/embed.html?bbox={bbox}&layer=mapnik&marker={lat},{lng}"
+
+        osm_src = _osm_embed(mapa_url) if mapa_url else None
+        if not osm_src and mapa_url and "google.com/maps/embed" in mapa_url:
+            osm_src = mapa_url  # URL de embed oficial, usarla directo
+
+        if osm_src:
             map_html = ("<div class='card np'><div class='sec-title'>\U0001f4cd Ubicaci\xf3n</div>"
-                        "<div class='maps-wrap'><iframe src='"+mapa_url+"' width='100%' height='220' frameborder='0' "
+                        "<div class='maps-wrap'><iframe src='"+osm_src+"' width='100%' height='220' frameborder='0' "
                         "style='border:0;border-radius:12px;display:block' allowfullscreen loading='lazy'></iframe></div>"
                         + link_txt + "</div>")
         else:
@@ -2381,7 +2406,7 @@ def nuevo_presupuesto():
             + fi("cond_extra","Nota libre en condiciones","text","Incluye ropa de cama...")
             + fps_html
             + "<div class='sep'></div>"
-            + fi("mapa_url","URL Google Maps","url","https://maps.google.com/...")
+            + fi("mapa_url","\U0001f4cd Link Google Maps (cualquier link, desde celular o web)","url","https://maps.app.goo.gl/...")
             + fi("observaciones","Observaciones para el cliente","text","Check-in 14hs...")
             + "<div class='sep'></div>"
             + "<div class='field'><label class='lbl'>Fotos (hasta 5)</label>"
