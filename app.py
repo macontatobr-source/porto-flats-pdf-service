@@ -1923,7 +1923,13 @@ def propuesta():
             if u: fotos.append(u)
         carousel = ""
         if fotos:
-            imgs = "".join("<img src='"+f+"' class='car-img' loading='lazy' onerror=\"this.style.display='none'\">" for f in fotos)
+            fotos_js = json.dumps(fotos, ensure_ascii=False)
+            imgs = "".join(
+                "<img src='"+f+"' class='car-img' loading='lazy' "
+                "onerror=\"this.style.display='none'\" "
+                "onclick='openLb("+fotos_js+","+str(i)+")'>"
+                for i, f in enumerate(fotos)
+            )
             carousel = "<div class='carousel'>"+imgs+"</div>"
         cs = "s" if quartos != "1" else ""
         bs = "s" if banheiros != "1" else ""
@@ -1954,22 +1960,22 @@ def propuesta():
             rows_p += "<div class='pr-row pr-total'><span>\U0001f4b0 Total estimado</span><span>R$ "+str(int(preco_v))+"</span></div>"
             price_html = "<div class='card'><div class='sec-title'>Precio estimado</div><div class='pr-table'>"+rows_p+"</div></div>"
         map_html = ""
-        if mapa_url:
-            embed_url = (mapa_url + ("&" if "?" in mapa_url else "?") + "output=embed"
-                         if "google.com/maps" in mapa_url and "output=embed" not in mapa_url
-                         else mapa_url)
+        loc_q    = urlquote(nome + ", Porto de Galinhas, Pernambuco, Brasil")
+        gmaps_fallback = "https://www.google.com/maps/search/?api=1&query=" + loc_q
+        link_url = mapa_url if mapa_url else gmaps_fallback
+        link_txt = ("<a href='"+link_url+"' style='display:block;text-align:center;"
+                    "font-size:13px;color:#4a90d9;margin-top:10px;text-decoration:underline' "
+                    "target='_blank'>\U0001f5fa Ver en Google Maps</a>")
+        # Solo usar iframe si es URL de embed oficial de Google Maps
+        is_embed = mapa_url and "google.com/maps/embed" in mapa_url
+        if is_embed:
             map_html = ("<div class='card np'><div class='sec-title'>\U0001f4cd Ubicaci\xf3n</div>"
-                        "<div class='maps-wrap'><iframe src='"+embed_url+"' width='100%' height='220' frameborder='0' "
+                        "<div class='maps-wrap'><iframe src='"+mapa_url+"' width='100%' height='220' frameborder='0' "
                         "style='border:0;border-radius:12px;display:block' allowfullscreen loading='lazy'></iframe></div>"
-                        "<a href='"+mapa_url+"' style='display:block;text-align:center;font-size:13px;color:#4a90d9;margin-top:10px;text-decoration:underline' target='_blank'>\U0001f5fa Ver en Google Maps</a></div>")
+                        + link_txt + "</div>")
         else:
-            loc_q = urlquote(nome + ", Porto de Galinhas, Pernambuco, Brasil")
-            gmaps_url = "https://www.google.com/maps/search/?api=1&query=" + loc_q
             map_html = ("<div class='card np'><div class='sec-title'>\U0001f4cd Ubicaci\xf3n</div>"
-                        "<div class='maps-wrap'><iframe src='https://maps.google.com/maps?q="+loc_q+"&output=embed' "
-                        "width='100%' height='220' frameborder='0' style='border:0;border-radius:12px;display:block' "
-                        "allowfullscreen loading='lazy'></iframe></div>"
-                        "<a href='"+gmaps_url+"' style='display:block;text-align:center;font-size:13px;color:#4a90d9;margin-top:10px;text-decoration:underline' target='_blank'>\U0001f5fa Ver en Google Maps</a></div>")
+                        + link_txt + "</div>")
         obs_lines = observ.replace("\r\n", "\n").replace("\r", "\n").split("\n") if observ else []
         obs_html = ("<div class='card'>"
                     + "".join("<p style='font-size:13px;color:#555;line-height:1.6;margin-bottom:4px'>&#8505;&#65039; "+ln.strip()+"</p>" for ln in obs_lines if ln.strip())
@@ -2038,7 +2044,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .pr-total{font-weight:700;font-size:16px;color:#87A286}
 .carousel{display:flex;overflow-x:auto;gap:10px;padding:14px 14px 4px;scrollbar-width:none;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
 .carousel::-webkit-scrollbar{display:none}
-.car-img{height:240px;min-width:320px;max-width:360px;object-fit:cover;border-radius:12px;flex-shrink:0;scroll-snap-align:start;background:#CDC6C3}
+.car-img{height:240px;min-width:320px;max-width:360px;object-fit:cover;border-radius:12px;flex-shrink:0;scroll-snap-align:start;background:#CDC6C3;cursor:zoom-in}
+#lb{display:none;position:fixed;inset:0;background:rgba(0,0,0,.93);z-index:9999;align-items:center;justify-content:center;flex-direction:column;padding:16px}
+#lb.open{display:flex}
+#lb-img{max-width:95vw;max-height:82vh;object-fit:contain;border-radius:10px}
+#lb-close{position:absolute;top:14px;right:18px;color:#fff;font-size:34px;cursor:pointer;line-height:1;font-weight:300}
+#lb-prev,#lb-next{position:absolute;top:50%;transform:translateY(-50%);color:#fff;font-size:48px;cursor:pointer;padding:10px 14px;user-select:none;opacity:.8}
+#lb-prev{left:0}#lb-next{right:0}
+#lb-count{color:#aaa;font-size:13px;margin-top:10px}
 .maps-wrap{border-radius:12px;overflow:hidden;margin-bottom:12px}
 .btn{display:block;text-align:center;padding:14px;border-radius:10px;font-size:15px;text-decoration:none;margin-top:10px;font-weight:500;cursor:pointer;border:none;width:100%;font-family:inherit}
 .btn-maps{background:#4a90d9;color:#fff}
@@ -2087,7 +2100,27 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         + "<div class='footer np'>Porto Flats \xb7 Alquileres temporarios<br>"
           "Porto de Galinhas \xb7 Pernambuco \xb7 Brasil<br>"
           "<small>Esta propuesta fue preparada especialmente para vos</small></div>\n"
+        + "<div id='lb' onclick=\"if(event.target===this)lbClose()\">"
+          "<span id='lb-close' onclick='lbClose()'>&#x2715;</span>"
+          "<span id='lb-prev' onclick='lbPrev()'>&#8249;</span>"
+          "<img id='lb-img' src=''>"
+          "<span id='lb-count'></span>"
+          "<span id='lb-next' onclick='lbNext()'>&#8250;</span>"
+          "</div>\n"
         + "<script>\nconst ROW='"+str(row)+"';\nconst DATA_B64='"+data_b64+"';\n"
+          "let _lbP=[],_lbI=0;\n"
+          "function openLb(pics,idx){_lbP=pics;_lbI=idx;_lbShow();}\n"
+          "function _lbShow(){const lb=document.getElementById('lb');lb.classList.add('open');"
+          "document.getElementById('lb-img').src=_lbP[_lbI];"
+          "document.getElementById('lb-count').textContent=(_lbI+1)+' / '+_lbP.length;}\n"
+          "function lbClose(){document.getElementById('lb').classList.remove('open');}\n"
+          "function lbPrev(){_lbI=(_lbI-1+_lbP.length)%_lbP.length;_lbShow();}\n"
+          "function lbNext(){_lbI=(_lbI+1)%_lbP.length;_lbShow();}\n"
+          "document.addEventListener('keydown',function(e){"
+          "if(!document.getElementById('lb').classList.contains('open'))return;"
+          "if(e.key==='ArrowLeft')lbPrev();"
+          "if(e.key==='ArrowRight')lbNext();"
+          "if(e.key==='Escape')lbClose();});\n"
           "function openTc(){document.getElementById('modal-tc').style.display='flex';}\n"
           "function closeTc(){document.getElementById('modal-tc').style.display='none';}\n"
           "function updateConfirm(){const any=document.querySelectorAll('.opt-chk:checked,#chk-todas:checked').length>0;document.getElementById('btn-confirm').disabled=!any;}\n"
@@ -2237,14 +2270,27 @@ def nuevo_presupuesto():
         sel_idxs = ",".join(str(i) for i in range(len(opciones)))
         prop_url  = SERVICE_URL + "/propuesta?data=" + data_b64 + "&sel=" + sel_idxs
 
+        # ── Acortar URL (best-effort) ──
+        short_url = prop_url
+        try:
+            import urllib.request as _ur, urllib.parse as _up
+            short_url = _ur.urlopen(
+                "https://tinyurl.com/api-create.php?url=" + _up.quote(prop_url, safe=""),
+                timeout=5
+            ).read().decode().strip()
+            if not short_url.startswith("http"):
+                short_url = prop_url
+        except Exception:
+            short_url = prop_url
+
         # ── Guardar en historial (best-effort, no bloquea) ──
-        _sheets_historial(nombre_completo, wa_dest, email_cl, ci, co, noites, prop_url)
+        _sheets_historial(nombre_completo, wa_dest, email_cl, ci, co, noites, short_url)
 
         # ── Enviar WhatsApp al cliente ──
         nombre_corto = nombre.split()[0].title() if nombre else "!"
         msg = ("\U0001f30a Hola *" + nombre_corto + "*!\n\n"
                "Te preparamos una propuesta de alojamiento en Porto de Galinhas.\n\n"
-               "\U0001f4cc Ver opciones y confirmar:\n" + prop_url)
+               "\U0001f4cc Ver opciones y confirmar:\n" + short_url)
         wa_ok = _evo_send_text(wa_dest, msg)
 
         # ── Pantalla de confirmación ──
@@ -2273,6 +2319,7 @@ def nuevo_presupuesto():
             + ("<p>WhatsApp:</p><div class='wa-num'>+" + wa_dest + "</div>" if wa_ok else
                "<p style='color:#c0392b'>El WhatsApp no se pudo enviar. Reenv\xealo manualmente.</p>")
             + "<a href='" + prop_url + "' class='btn btn-green' target='_blank'>\U0001f440 Ver propuesta del cliente</a>"
+            "<p style='font-size:12px;color:#aaa;margin-top:4px;word-break:break-all'>"+short_url+"</p>"
             "<a href='/nuevo-presupuesto' class='btn btn-outline'>➕ Nueva propuesta</a>"
             "</div></body></html>"
         )
