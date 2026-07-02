@@ -1333,25 +1333,45 @@ def debug_row():
 @app.route("/dashboard")
 def dashboard():
     """Panel interno: cards con opciones para seleccionar y enviar."""
-    row = request.args.get("row", "")
-    if not row:
-        return Response("Falta ?row=N", status=400, mimetype="text/plain")
-    rd = _sheets_get_row(row)
-    if not rd:
+    row_single = request.args.get("row",  "")
+    rows_raw   = request.args.get("rows", "")
+    if rows_raw:
+        row_list = [r.strip() for r in rows_raw.split(",") if r.strip()]
+    elif row_single:
+        row_list = [row_single]
+    else:
+        return Response("Falta ?row=N o ?rows=N1,N2", status=400, mimetype="text/plain")
+    rows_data = {}
+    for r in row_list:
+        rd = _sheets_get_row(r)
+        if rd:
+            rows_data[r] = rd
+    if not rows_data:
         return Response("Error leyendo Sheets.", status=500, mimetype="text/plain")
-    nombre = rd.get("nombre", "Cliente")
-    ci     = rd.get("fecha_entrada", "")
-    co     = rd.get("fecha_salida",  "")
-    noites = rd.get("noites", "")
-    try:
-        opciones = json.loads(rd.get("opciones_json", "[]") or "[]")
-    except Exception:
-        opciones = []
-    if not opciones:
-        return Response("No hay opciones en esta fila.", status=404, mimetype="text/plain")
+    lead_rd = rows_data.get(row_list[0], {})
+    for r in row_list:
+        if rows_data.get(r, {}).get("nombre", ""):
+            lead_rd = rows_data[r]
+            break
+    nombre = lead_rd.get("nombre", "Cliente")
+    ci     = lead_rd.get("fecha_entrada", "")
+    co     = lead_rd.get("fecha_salida",  "")
+    noites = lead_rd.get("noites", "")
+    all_opts = []  # [(r_str, local_idx, opt_dict)]
+    for r in row_list:
+        rd = rows_data.get(r, {})
+        try:
+            opciones = json.loads(rd.get("opciones_json", "[]") or "[]")
+        except Exception:
+            opciones = []
+        for local_idx, opt in enumerate(opciones):
+            all_opts.append((r, local_idx, opt))
+    if not all_opts:
+        return Response("No hay opciones en estas filas.", status=404, mimetype="text/plain")
+    rows_param = ",".join(row_list)
 
-    def _card(i, opt):
-        nome      = opt.get("nome", opt.get("Title", "Opcion " + str(i+1)))
+    def _card(global_i, r_str, local_idx, opt):
+        nome      = opt.get("nome", opt.get("Title", "Opcion " + str(global_i+1)))
         distancia = opt.get("distancia", "")
         quartos   = opt.get("quartos",   opt.get("cuartos",   ""))
         banheiros = opt.get("banheiros", opt.get("banos",     ""))
@@ -1388,12 +1408,13 @@ def dashboard():
         if margen_v > 0: prows += "<div class='prd-row prd-mg'><span>Margen estimado</span><span>R$ "+str(int(margen_v))+"</span></div>"
         price_html = ("<div class='price-detail'>"+prows+"</div>" if prows else "")
         url_html = ("<a href='"+url_anuncio+"' target='_blank' class='url-anuncio'>\U0001f517 Ver anuncio original</a>" if url_anuncio else "")
+        chk_value = r_str + ":" + str(local_idx)
         parts = [
-            '<div class="opt-card" id="card-'+str(i)+'">',
+            '<div class="opt-card" id="card-'+str(global_i)+'">',
             '<div class="card-top"><label class="chk-wrap">',
-            '<input type="checkbox" name="sel" value="'+str(i)+'" onchange="updateBtn()">',
+            '<input type="checkbox" name="sel" value="'+chk_value+'" onchange="updateBtn()">',
             '<span class="chk-txt">Incluir en propuesta</span></label>',
-            '<span class="opt-num">#'+str(i+1)+'</span></div>',
+            '<span class="opt-num">#'+str(global_i+1)+'</span></div>',
             thumb,
             '<div class="card-info"><div class="opt-name">'+nome+'</div>',
             ('<div class="opt-loc">\U0001f4cd '+distancia+'</div>' if distancia else ""),
@@ -1402,12 +1423,12 @@ def dashboard():
             price_html,
             url_html,
             '</div>',
-            '<a href="/editar?row='+str(row)+'&amp;idx='+str(i)+'" class="btn-editar">✏️ Editar propuesta</a>',
+            '<a href="/editar?row='+r_str+'&amp;idx='+str(local_idx)+'" class="btn-editar">✏️ Editar propuesta</a>',
             '</div>'
         ]
         return "".join(parts)
 
-    cards_html = "\n".join(_card(i, o) for i, o in enumerate(opciones))
+    cards_html = "\n".join(_card(gi, r, li, o) for gi, (r, li, o) in enumerate(all_opts))
     rp = []
     if nombre: rp.append(nombre)
     if ci and co: rp.append(ci + " → " + co)
@@ -1448,7 +1469,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .prd-mg{color:#2e7d32}
 .url-anuncio{display:block;margin:6px 0 4px;font-size:12px;color:#4a90d9;text-decoration:none;padding:0 2px}
 """
-    subhead_html = ("<div class='subhead'><span>"+resumen+"</span><span style='color:#87A286;font-size:12px'>fila "+str(row)+"</span></div>"
+    subhead_html = ("<div class='subhead'><span>"+resumen+"</span><span style='color:#87A286;font-size:12px'>filas "+rows_param+"</span></div>"
                     if resumen else "")
     html = (
         "<!DOCTYPE html>\n<html lang='es'>\n<head>\n"
@@ -1469,10 +1490,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         "async function enviar(){\n"
         "  const btn=document.getElementById('btn-enviar');\n"
         "  const msgBox=document.getElementById('msg-box');\n"
-        "  const selected=[...document.querySelectorAll('input[name=sel]:checked')].map(x=>parseInt(x.value));\n"
+        "  const sels=[...document.querySelectorAll('input[name=sel]:checked')];\n"
+        "  const selections=sels.map(function(x){var p=x.value.split(':');return{row:p[0],idx:parseInt(p[1])};});\n"
         "  btn.disabled=true;btn.textContent='Enviando…';msgBox.style.display='none';\n"
         "  try{\n"
-        "    const r=await fetch('/enviar-propuesta',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({row:'"+str(row)+"',selected})});\n"
+        "    const r=await fetch('/enviar-propuesta',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rows:'"+rows_param+"',selections})});\n"
         "    const j=await r.json();\n"
         "    if(j.ok){msgBox.textContent='✅ Propuesta enviada! '+(j.url||'');msgBox.className='msg-box msg-ok';msgBox.style.display='block';btn.textContent='✅ Enviado';}\n"
         "    else{msgBox.textContent='Error: '+(j.error||'desconocido');msgBox.className='msg-box msg-err';msgBox.style.display='block';btn.disabled=false;btn.textContent='&#128228; Enviar propuesta al cliente';}\n"
@@ -1782,22 +1804,63 @@ textarea{resize:vertical;min-height:60px}
 # ── /enviar-propuesta ─────────────────────────────────────────────────────────
 @app.route("/enviar-propuesta", methods=["POST"])
 def enviar_propuesta():
-    """Recibe {row, selected:[0,2]}, envia WhatsApp al cliente con link /propuesta."""
-    data     = request.get_json(force=True) or {}
-    row      = str(data.get("row", ""))
-    selected = data.get("selected", [])
-    if not row or not selected:
-        return jsonify({"error": "Faltan row o selected"}), 400
-    rd = _sheets_get_row(row)
-    if not rd:
+    """Recibe {rows, selections:[{row,idx}]}, envia WhatsApp al cliente con link /propuesta."""
+    import base64 as _b64, zlib as _zlib
+    data       = request.get_json(force=True) or {}
+    rows_raw   = str(data.get("rows",   ""))
+    row_single = str(data.get("row",    ""))
+    selections = data.get("selections", [])  # [{row, idx}]
+    selected   = data.get("selected",   [])  # legacy [int]
+    if rows_raw:
+        row_list = [r.strip() for r in rows_raw.split(",") if r.strip()]
+    elif row_single:
+        row_list = [row_single]
+    else:
+        return jsonify({"error": "Faltan row o rows"}), 400
+    rows_data = {}
+    for r in row_list:
+        rd = _sheets_get_row(r)
+        if rd:
+            rows_data[r] = rd
+    if not rows_data:
         return jsonify({"error": "Error leyendo Sheets"}), 500
-    nombre   = rd.get("nombre", "")
-    whatsapp = rd.get("whatsapp", "")
-    ci       = rd.get("fecha_entrada", "")
-    co       = rd.get("fecha_salida",  "")
-    noites   = rd.get("noites", "")
-    sel_str       = ",".join(str(x) for x in selected)
-    propuesta_url = SERVICE_URL + "/propuesta?row=" + row + "&sel=" + sel_str
+    lead_rd = rows_data.get(row_list[0], {})
+    for r in row_list:
+        if rows_data.get(r, {}).get("nombre", ""):
+            lead_rd = rows_data[r]
+            break
+    nombre   = lead_rd.get("nombre",       "")
+    whatsapp = lead_rd.get("whatsapp",      "")
+    ci       = lead_rd.get("fecha_entrada", "")
+    co       = lead_rd.get("fecha_salida",  "")
+    noites   = lead_rd.get("noites",        "")
+    opts_selected = []
+    if selections:
+        for sel in selections:
+            r_str = str(sel.get("row", ""))
+            idx   = int(sel.get("idx", 0))
+            if r_str in rows_data:
+                try:
+                    opciones = json.loads(rows_data[r_str].get("opciones_json", "[]") or "[]")
+                    if idx < len(opciones):
+                        opts_selected.append(opciones[idx])
+                except Exception:
+                    pass
+    elif selected and row_single in rows_data:
+        try:
+            opciones = json.loads(rows_data[row_single].get("opciones_json", "[]") or "[]")
+            for idx in selected:
+                if int(idx) < len(opciones):
+                    opts_selected.append(opciones[int(idx)])
+        except Exception:
+            pass
+    if not opts_selected:
+        return jsonify({"error": "No se encontraron opciones seleccionadas"}), 400
+    propuesta_data = {"nombre": nombre, "ci": ci, "co": co, "noites": noites, "opciones": opts_selected}
+    raw_json   = json.dumps(propuesta_data, ensure_ascii=False).encode("utf-8")
+    compressed = _zlib.compress(raw_json)
+    data_b64   = _b64.urlsafe_b64encode(compressed).decode("ascii").rstrip("=")
+    propuesta_url = SERVICE_URL + "/propuesta?data=" + data_b64
     short_url     = _tinyurl(propuesta_url)
     nombre_corto  = nombre.split()[0].title() if nombre else "cliente"
     eW = "\U0001f44b"; ePF = "\U0001f3d6"; eCal = "\U0001f4c5"
@@ -1813,7 +1876,8 @@ def enviar_propuesta():
     msg += "Entr\xe1 al link, eleg\xed la opci\xf3n que m\xe1s te guste y confirm\xe1nos.\n"
     msg += "Cualquier consulta, estamos a disposici\xf3n!\n*Porto Flats* " + ePF
     _evo_send_text(whatsapp, msg)
-    _sheets_update(row, "estado", "Enviado al cliente")
+    for r in row_list:
+        _sheets_update(r, "estado", "Enviado al cliente")
     return jsonify({"ok": True, "url": short_url, "numero": whatsapp})
 
 
