@@ -55,7 +55,7 @@ def _evo_send_pdf(numero, pdf_b64, filename, caption=""):
 
 # ── Own Short Links (propuestas.portoflats.com) ──────────────────────────────
 PROPUESTAS_DOMAIN = os.environ.get("PROPUESTAS_DOMAIN", "https://propuestas.portoflats.com")
-SHORT_LINKS_FILE  = os.environ.get("SHORT_LINKS_FILE",  "/data/short_links.json")
+SHORT_LINKS_FILE  = os.environ.get("SHORT_LINKS_FILE",  "/tmp/short_links.json")
 
 def _load_links():
     try:
