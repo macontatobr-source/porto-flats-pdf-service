@@ -11,7 +11,8 @@ import textwrap
 from datetime import datetime
 
 import requests as http
-from flask import Flask, request, jsonify, Response
+import uuid as _uuid
+from flask import Flask, request, jsonify, Response, redirect
 from build_presupuesto import draw_presupuesto, draw_presupuesto_v2
 from build_recibo import draw_recibo
 
@@ -52,18 +53,69 @@ def _evo_send_pdf(numero, pdf_b64, filename, caption=""):
     except Exception as e:
         print(f"[EVO pdf error] {e}")
 
-def _tinyurl(url):
+# ── Own Short Links (propuestas.portoflats.com) ──────────────────────────────
+PROPUESTAS_DOMAIN = os.environ.get("PROPUESTAS_DOMAIN", "https://propuestas.portoflats.com")
+SHORT_LINKS_FILE  = os.environ.get("SHORT_LINKS_FILE",  "/data/short_links.json")
+
+def _load_links():
     try:
-        r = http.get(f"https://tinyurl.com/api-create.php?url={url}", timeout=10)
-        return r.text.strip() or url
+        with open(SHORT_LINKS_FILE) as f:
+            return json.load(f)
     except Exception:
-        return url
+        return {}
+
+def _save_links(links):
+    try:
+        os.makedirs(os.path.dirname(SHORT_LINKS_FILE), exist_ok=True)
+        with open(SHORT_LINKS_FILE, "w") as f:
+            json.dump(links, f)
+    except Exception as e:
+        print(f"[shortlinks save error] {e}")
+
+def _own_shorten(url):
+    """Genera un link corto con dominio propio. Reemplaza TinyURL."""
+    try:
+        code = _uuid.uuid4().hex[:8]
+        links = _load_links()
+        links[code] = url
+        _save_links(links)
+        return f"{PROPUESTAS_DOMAIN}/p/{code}"
+    except Exception:
+        return url  # fallback: URL completa
+
+def _tinyurl(url):
+    """Alias para compatibilidad — usa dominio propio."""
+    return _own_shorten(url)
 
 
 # ── /health ──────────────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok", "service": "porto-flats-pdf"})
+
+
+# ── /api/shorten ─────────────────────────────────────────────────────────────
+@app.route("/api/shorten", methods=["POST"])
+def api_shorten():
+    """Crea un link corto propio. Body: {url: '...'} → {short_url: '...', code: '...'}"""
+    data = request.get_json(silent=True) or {}
+    url  = data.get("url", "").strip()
+    if not url:
+        return jsonify({"error": "url requerida"}), 400
+    short = _own_shorten(url)
+    code  = short.rsplit("/", 1)[-1]
+    return jsonify({"short_url": short, "code": code, "original_url": url})
+
+
+# ── /p/<code> ────────────────────────────────────────────────────────────────
+@app.route("/p/<code>", methods=["GET"])
+def redirect_short(code):
+    """Redirige al link original a partir del código corto."""
+    links = _load_links()
+    dest  = links.get(code)
+    if not dest:
+        return jsonify({"error": "link no encontrado"}), 404
+    return redirect(dest, code=302)
 
 
 # ── /propiedad ────────────────────────────────────────────────────────────────
@@ -2362,13 +2414,7 @@ def nuevo_presupuesto():
         # ── Acortar URL (best-effort) ──
         short_url = prop_url
         try:
-            import urllib.request as _ur, urllib.parse as _up
-            short_url = _ur.urlopen(
-                "https://tinyurl.com/api-create.php?url=" + _up.quote(prop_url, safe=""),
-                timeout=5
-            ).read().decode().strip()
-            if not short_url.startswith("http"):
-                short_url = prop_url
+            short_url = _own_shorten(prop_url)
         except Exception:
             short_url = prop_url
 
