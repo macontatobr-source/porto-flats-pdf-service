@@ -88,6 +88,53 @@ def _tinyurl(url):
     return _own_shorten(url)
 
 
+# ── Proposal Store (45 días de retención) ────────────────────────────────────
+PROPOSALS_FILE = os.environ.get("PROPOSALS_FILE", "/app/proposals.json")
+
+def _load_proposals():
+    try:
+        with open(PROPOSALS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_proposals_store(store):
+    try:
+        d = os.path.dirname(PROPOSALS_FILE)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(PROPOSALS_FILE, "w") as f:
+            json.dump(store, f, ensure_ascii=False)
+    except Exception as e:
+        print(f"[proposals save error] {e}")
+
+def _purge_proposals(store, days=45):
+    from datetime import datetime, timedelta
+    cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+    return {k: v for k, v in store.items() if v.get("created_at", "") > cutoff}
+
+def _store_proposal(nombre, wa_dest, email, ci, co, noites, prop_url, form_dict):
+    """Guarda propuesta en el store local. Retorna prop_id. Purga automáticamente > 45 días."""
+    from datetime import datetime
+    store = _load_proposals()
+    store = _purge_proposals(store)
+    prop_id = _uuid.uuid4().hex[:10]
+    store[prop_id] = {
+        "id":         prop_id,
+        "created_at": datetime.now().isoformat(),
+        "nombre":     nombre,
+        "wa_dest":    wa_dest,
+        "email":      email,
+        "ci":         ci,
+        "co":         co,
+        "noites":     noites,
+        "prop_url":   prop_url,
+        "form_data":  form_dict,
+    }
+    _save_proposals_store(store)
+    return prop_id
+
+
 # ── /health ──────────────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
@@ -116,6 +163,85 @@ def redirect_short(code):
     if not dest:
         return jsonify({"error": "link no encontrado"}), 404
     return redirect(dest, code=302)
+
+
+# ── /v/<prop_id> — URL limpia con dominio propio ──────────────────────────────
+@app.route("/v/<prop_id>", methods=["GET"])
+def view_propuesta(prop_id):
+    """Sirve la propuesta desde el historial local. URL limpia y persistente (45 días)."""
+    store = _load_proposals()
+    entry = store.get(prop_id)
+    if not entry:
+        html_exp = (
+            "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<title>Porto Flats</title>"
+            "<style>body{font-family:-apple-system,sans-serif;background:#EDE9E3;"
+            "display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}"
+            ".card{background:#fff;border-radius:18px;padding:32px 24px;max-width:380px;"
+            "width:90%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08)}"
+            "h2{color:#87A286;font-size:20px;margin-bottom:12px}"
+            "p{font-size:14px;color:#666;line-height:1.6}"
+            "</style></head><body>"
+            "<div class='card'><h2>🌊 Porto Flats</h2>"
+            "<p>Esta propuesta ya no está disponible.<br>"
+            "Contactanos por WhatsApp para recibir una nueva.</p></div>"
+            "</body></html>"
+        )
+        return Response(html_exp.encode("utf-8"), content_type="text/html; charset=utf-8", status=410)
+    return redirect(entry["prop_url"], code=302)
+
+
+# ── /api/historial ────────────────────────────────────────────────────────────
+@app.route("/api/historial", methods=["GET"])
+def api_historial():
+    """Lista propuestas enviadas en los últimos 45 días (sin form_data completo)."""
+    store = _load_proposals()
+    store = _purge_proposals(store)
+    items = []
+    for v in sorted(store.values(), key=lambda x: x.get("created_at", ""), reverse=True):
+        items.append({
+            "id":         v["id"],
+            "created_at": v.get("created_at", ""),
+            "nombre":     v.get("nombre", ""),
+            "wa_dest":    v.get("wa_dest", ""),
+            "email":      v.get("email", ""),
+            "ci":         v.get("ci", ""),
+            "co":         v.get("co", ""),
+            "noites":     v.get("noites", ""),
+            "short_url":  PROPUESTAS_DOMAIN + "/v/" + v["id"],
+        })
+    return jsonify({"ok": True, "total": len(items), "propuestas": items})
+
+
+# ── /api/propuesta/<prop_id> ──────────────────────────────────────────────────
+@app.route("/api/propuesta/<prop_id>", methods=["GET"])
+def api_get_propuesta(prop_id):
+    """Devuelve propuesta completa (con form_data) para edición."""
+    store = _load_proposals()
+    entry = store.get(prop_id)
+    if not entry:
+        return jsonify({"error": "No encontrada o vencida"}), 404
+    return jsonify({"ok": True, "propuesta": entry})
+
+
+# ── /api/reenviar/<prop_id> ───────────────────────────────────────────────────
+@app.route("/api/reenviar/<prop_id>", methods=["POST"])
+def api_reenviar(prop_id):
+    """Reenvía por WhatsApp la misma propuesta usando la URL limpia almacenada."""
+    store = _load_proposals()
+    entry = store.get(prop_id)
+    if not entry:
+        return jsonify({"error": "No encontrada o vencida"}), 404
+    short_url       = PROPUESTAS_DOMAIN + "/v/" + prop_id
+    nombre_completo = entry.get("nombre", "")
+    wa_dest         = entry.get("wa_dest", "")
+    nombre_corto    = nombre_completo.split()[0].title() if nombre_completo else "!"
+    msg = ("\U0001f30a Hola *" + nombre_corto + "*!\n\n"
+           "Te reenviamos tu propuesta de alojamiento en Porto de Galinhas.\n\n"
+           "\U0001f4cc Ver opciones:\n" + short_url)
+    wa_ok = _evo_send_text(wa_dest, msg)
+    return jsonify({"ok": wa_ok, "short_url": short_url, "wa_dest": wa_dest})
 
 
 # ── /propiedad ────────────────────────────────────────────────────────────────
@@ -1326,7 +1452,7 @@ def last_row():
 
 
 # ── Fotos: upload / serve / limpieza ─────────────────────────────────────────
-def _cleanup_old_photos(max_days=7):
+def _cleanup_old_photos(max_days=50):
     cutoff = _time.time() - max_days * 86400
     for f in _UPL_DIR.glob("*"):
         if f.is_file() and f.stat().st_mtime < cutoff:
@@ -2411,14 +2537,42 @@ def nuevo_presupuesto():
         sel_idxs = ",".join(str(i) for i in range(len(opciones)))
         prop_url  = SERVICE_URL + "/propuesta?data=" + data_b64 + "&sel=" + sel_idxs
 
-        # ── Acortar URL (best-effort) ──
+        # ── Capturar form_data completo para historial editable ──
+        form_dict = {
+            "nombre": nombre, "apellido": request.form.get("apellido", ""),
+            "fecha_entrada": ci, "fecha_salida": co,
+            "personas": request.form.get("personas", ""),
+            "notas_internas": request.form.get("notas_internas", ""),
+            "pais": pais, "whatsapp_num": wa_num, "email_cliente": email_cl,
+        }
+        for _sfx in ["_0", "_1"]:
+            for _f in ["nome","distancia","quartos","banheiros","hospedes","amenidades",
+                       "preco_total","taxa_limpeza","mapa_url","observaciones","cond_extra",
+                       "preco_noche","n_noites","margen_pct","preco_sugerido","ganancia_r",
+                       "reserva_anticipo","saldo_plazo","url","forma_pago"]:
+                v = request.form.get(_f + _sfx, "")
+                if v: form_dict[_f + _sfx] = v
+            for _fi in range(1, 6):
+                v = request.form.get("foto" + str(_fi) + "_up" + _sfx, "")
+                if v: form_dict["foto" + str(_fi) + "_up" + _sfx] = v
+            for _k in ["fp_efectivo","fp_transf","fp_pix","fp_cripto","fp_tarjeta"]:
+                v = request.form.get(_k + _sfx, "")
+                if v: form_dict[_k + _sfx] = "on"
+
+        # ── Guardar en store local (45 días) → URL limpia con dominio propio ──
         short_url = prop_url
         try:
-            short_url = _own_shorten(prop_url)
-        except Exception:
-            short_url = prop_url
+            prop_id   = _store_proposal(nombre_completo, wa_dest, email_cl,
+                                        ci, co, noites, prop_url, form_dict)
+            short_url = PROPUESTAS_DOMAIN + "/v/" + prop_id
+        except Exception as _e:
+            print(f"[store_proposal error] {_e}")
+            try:
+                short_url = _own_shorten(prop_url)   # fallback al shortlink anterior
+            except Exception:
+                short_url = prop_url
 
-        # ── Guardar en historial (best-effort, no bloquea) ──
+        # ── Guardar en historial Google Sheets (best-effort, no bloquea) ──
         _sheets_historial(nombre_completo, wa_dest, email_cl, ci, co, noites, short_url)
 
         # ── Enviar WhatsApp al cliente ──
@@ -2453,14 +2607,27 @@ def nuevo_presupuesto():
             "<p>Cliente: <strong>" + nombre_completo + "</strong></p>"
             + ("<p>WhatsApp:</p><div class='wa-num'>+" + wa_dest + "</div>" if wa_ok else
                "<p style='color:#c0392b'>El WhatsApp no se pudo enviar. Reenv\xealo manualmente.</p>")
-            + "<a href='" + prop_url + "' class='btn btn-green' target='_blank'>\U0001f440 Ver propuesta del cliente</a>"
+            + "<a href='" + short_url + "' class='btn btn-green' target='_blank'>\U0001f440 Ver propuesta del cliente</a>"
             "<p style='font-size:12px;color:#aaa;margin-top:4px;word-break:break-all'>"+short_url+"</p>"
             "<a href='/nuevo-presupuesto' class='btn btn-outline'>➕ Nueva propuesta</a>"
+            "<a href='/nuevo-presupuesto#historial' class='btn btn-outline' style='margin-top:6px'>📋 Ver historial</a>"
             "</div></body></html>"
         )
         return Response(html_ok.encode("utf-8"), content_type="text/html; charset=utf-8")
 
     # ── GET ── Renderizar formulario ──────────────────────────────────────────
+    # Soporte para ?edit=ID — pre-cargar datos de una propuesta anterior
+    edit_id        = request.args.get("edit", "")
+    edit_data_json = "null"
+    if edit_id:
+        try:
+            _edit_store = _load_proposals()
+            _edit_entry = _edit_store.get(edit_id)
+            if _edit_entry and _edit_entry.get("form_data"):
+                edit_data_json = json.dumps(_edit_entry["form_data"], ensure_ascii=False)
+        except Exception:
+            pass
+
     def _opt_fields(sfx, label):
         """Genera el bloque HTML de campos para una opción."""
         def fi(name, lbl, typ="text", ph="", extra=""):
@@ -2553,6 +2720,30 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
 .foto-num{width:18px;text-align:center;font-size:12px;color:#CDC6C3;font-weight:700;flex-shrink:0}
 .upload-lbl{flex:1;background:#EDE9E3;border-radius:8px;padding:8px 12px;font-size:13px;cursor:pointer;color:#555}
 .fstatus{font-size:12px;color:#87A286;min-width:24px;text-align:right}
+/* ── Panel interno ── */
+.int-panel{display:flex;align-items:center;justify-content:space-between;background:#3D3D3D;padding:10px 14px;position:sticky;top:0;z-index:100}
+.int-title{color:rgba(255,255,255,.85);font-size:12px;font-weight:600;letter-spacing:.5px}
+.int-actions{display:flex;gap:8px}
+.btn-hist-trigger{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn-hist-trigger:active{background:rgba(255,255,255,.22)}
+/* ── Modal historial ── */
+.hist-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;align-items:flex-end}
+.hist-sheet{background:#fff;border-radius:20px 20px 0 0;width:100%;max-height:85vh;overflow-y:auto;padding-bottom:24px}
+.hist-header{display:flex;align-items:center;justify-content:space-between;padding:16px 16px 12px;border-bottom:1px solid #EDE9E3;position:sticky;top:0;background:#fff;z-index:1}
+.hist-title{font-size:15px;font-weight:700;color:#3D3D3D}
+.hist-close{background:none;border:none;font-size:24px;color:#aaa;cursor:pointer;line-height:1;padding:0 4px}
+.hist-item{border-bottom:1px solid #EDE9E3;padding:14px 16px}
+.hist-item:last-child{border-bottom:none}
+.hist-name{font-size:15px;font-weight:600;color:#3D3D3D;margin-bottom:2px}
+.hist-meta{font-size:12px;color:#87A286;margin-bottom:2px}
+.hist-wa{font-size:12px;color:#aaa}
+.hist-acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.hbtn{padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:none;font-family:inherit;text-decoration:none;display:inline-block}
+.hbtn-view{background:#EDE9E3;color:#3D3D3D}
+.hbtn-edit{background:#87A286;color:#fff}
+.hbtn-send{background:#3D3D3D;color:#fff}
+.hbtn:disabled{opacity:.5;cursor:not-allowed}
+.edit-banner{background:#fff3cd;border-left:4px solid #ffc107;padding:10px 14px;margin:10px 12px 0;border-radius:6px;font-size:13px;color:#856404}
 """
     opt2_display = "display:none"
     html_np = (
@@ -2563,7 +2754,14 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "<style>"+css_np+"</style>\n</head>\n<body>\n"
         "<div class='header'><div class='logo'>PORTO FLATS</div>"
         "<div class='logo-sub'>Nuevo presupuesto manual</div></div>\n"
-        "<form method='POST' action='/nuevo-presupuesto'>\n"
+        "<div class='int-panel'>"
+        "<span class='int-title'>⚙️ Panel de Ejecución</span>"
+        "<div class='int-actions'>"
+        "<button type='button' class='btn-hist-trigger' onclick='openHistorial()'>📋 Historial</button>"
+        "</div></div>\n"
+        + ("<div class='edit-banner'>✏️ Editando propuesta anterior — modificá los campos y enviá de nuevo.</div>\n"
+           if edit_id else "")
+        + "<form method='POST' action='/nuevo-presupuesto'>\n"
         # ── Datos del cliente ──
         "<div class='card'><h2>\U0001f464 Datos del cliente</h2>"
         "<div class='row'>"
@@ -2667,7 +2865,96 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "}\n"
         "function uploadFoto_0(input,fi){uploadFoto('_0',input,fi);}\n"
         "function uploadFoto_1(input,fi){uploadFoto('_1',input,fi);}\n"
-        "</script>\n</body>\n</html>"
+        # ── Historial functions ──────────────────────────────────────────────
+        "async function openHistorial(){\n"
+        "  const modal=document.getElementById('hist-modal');\n"
+        "  modal.style.display='flex';\n"
+        "  const list=document.getElementById('hist-list');\n"
+        "  list.innerHTML='<p style=\"text-align:center;color:#999;padding:24px\">Cargando...</p>';\n"
+        "  try{\n"
+        "    const r=await fetch('/api/historial');\n"
+        "    const j=await r.json();\n"
+        "    if(!j.ok||!j.propuestas.length){\n"
+        "      list.innerHTML='<p style=\"text-align:center;color:#999;padding:24px\">No hay propuestas en los últimos 45 días.</p>';\n"
+        "      return;\n"
+        "    }\n"
+        "    list.innerHTML=j.propuestas.map(p=>{\n"
+        "      const d=p.created_at?new Date(p.created_at).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'';\n"
+        "      return `<div class='hist-item'>`\n"
+        "        +`<div class='hist-name'>${p.nombre||'Sin nombre'}</div>`\n"
+        "        +`<div class='hist-meta'>${d} · ${p.ci||'?'} → ${p.co||'?'} · ${p.noites||'?'} noches</div>`\n"
+        "        +`<div class='hist-wa'>${p.wa_dest||''}</div>`\n"
+        "        +`<div class='hist-acts'>`\n"
+        "        +`<a href='${p.short_url}' target='_blank' class='hbtn hbtn-view'>👁 Ver</a>`\n"
+        "        +`<button class='hbtn hbtn-edit' onclick='editProp(\"${p.id}\")'>✏️ Editar</button>`\n"
+        "        +`<button class='hbtn hbtn-send' id='rb-${p.id}' onclick='reenviarProp(\"${p.id}\")'>📤 Reenviar</button>`\n"
+        "        +`</div></div>`;\n"
+        "    }).join('');\n"
+        "  }catch(e){\n"
+        "    list.innerHTML='<p style=\"color:#c00;padding:20px\">Error: '+e.message+'</p>';\n"
+        "  }\n"
+        "}\n"
+        "function closeHistorial(){\n"
+        "  document.getElementById('hist-modal').style.display='none';\n"
+        "}\n"
+        "async function reenviarProp(id){\n"
+        "  if(!confirm('¿Reenviar esta propuesta por WhatsApp?'))return;\n"
+        "  const btn=document.getElementById('rb-'+id);\n"
+        "  if(btn){btn.disabled=true;btn.textContent='Enviando…';}\n"
+        "  try{\n"
+        "    const r=await fetch('/api/reenviar/'+id,{method:'POST'});\n"
+        "    const j=await r.json();\n"
+        "    if(btn){btn.textContent=j.ok?'✅ Enviado':'❌ Error';}\n"
+        "    if(!j.ok&&btn){btn.disabled=false;}\n"
+        "  }catch(e){if(btn){btn.textContent='❌ Error';btn.disabled=false;}}\n"
+        "}\n"
+        "async function editProp(id){\n"
+        "  closeHistorial();\n"
+        "  try{\n"
+        "    const r=await fetch('/api/propuesta/'+id);\n"
+        "    const j=await r.json();\n"
+        "    if(!j.ok){alert('No se pudo cargar la propuesta.');return;}\n"
+        "    fillForm(j.propuesta.form_data||{});\n"
+        "    window.scrollTo({top:0,behavior:'smooth'});\n"
+        "    if(!document.querySelector('.edit-banner')){\n"
+        "      const b=document.createElement('div');\n"
+        "      b.className='edit-banner';\n"
+        "      b.textContent='✏️ Editando propuesta anterior — modificá y enviá de nuevo.';\n"
+        "      document.querySelector('.int-panel').insertAdjacentElement('afterend',b);\n"
+        "    }\n"
+        "  }catch(e){alert('Error: '+e.message);}\n"
+        "}\n"
+        "function fillForm(fd){\n"
+        "  Object.entries(fd).forEach(([k,v])=>{\n"
+        "    const el=document.querySelector('[name=\"'+k+'\"]');\n"
+        "    if(!el)return;\n"
+        "    if(el.type==='file'||el.type==='checkbox')return;\n"
+        "    el.value=v;\n"
+        "  });\n"
+        "  // Mostrar opción 2 si hay datos\n"
+        "  const has2=Object.keys(fd).some(k=>k.endsWith('_1')&&fd[k]);\n"
+        "  if(has2&&document.getElementById('opt2-block')){\n"
+        "    document.getElementById('opt2-block').style.display='block';\n"
+        "    const addBtn=document.querySelector('.btn-add-opt');\n"
+        "    if(addBtn)addBtn.style.display='none';\n"
+        "  }\n"
+        "  calcNoches();\n"
+        "}\n"
+        # ── Pre-cargar desde ?edit=ID (en carga de página) ──────────────────
+        "const EDIT_DATA=" + edit_data_json + ";\n"
+        "if(EDIT_DATA){fillForm(EDIT_DATA);}\n"
+        "if(location.hash==='#historial'){openHistorial();}\n"
+        "</script>\n"
+        # ── Modal historial ─────────────────────────────────────────────────
+        "<div class='hist-modal' id='hist-modal' onclick='if(event.target===this)closeHistorial()'>\n"
+        "<div class='hist-sheet'>\n"
+        "<div class='hist-header'>"
+        "<span class='hist-title'>📋 Historial de propuestas <small style='color:#aaa;font-size:11px;font-weight:400'>(últimos 45 días)</small></span>"
+        "<button class='hist-close' onclick='closeHistorial()'>×</button>"
+        "</div>\n"
+        "<div id='hist-list'></div>\n"
+        "</div></div>\n"
+        "</body>\n</html>"
     )
     return Response(html_np.encode('utf-8'), content_type="text/html; charset=utf-8")
 
