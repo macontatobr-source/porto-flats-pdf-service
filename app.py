@@ -135,6 +135,66 @@ def _store_proposal(nombre, wa_dest, email, ci, co, noites, prop_url, form_dict)
     return prop_id
 
 
+# ── Settings Store ────────────────────────────────────────────────────────────
+SETTINGS_FILE = os.environ.get("SETTINGS_FILE", "/app/settings.json")
+
+DEFAULT_SETTINGS = {
+    "n_fotos":             8,       # Fotos por opción (1-10)
+    "margen_pct":          25,      # Margen % por defecto
+    "reserva_anticipo":    50,      # Anticipo % por defecto
+    "saldo_plazo":         "15 días antes del check-in",
+    "forma_pago_defaults": ["fp_transf"],   # checkboxes pre-marcados
+    "msg_intro":           "Te preparamos una propuesta de alojamiento en Porto de Galinhas.",
+    "dias_historial":      45,
+    "cond_extra_default":  "",      # Nota libre en condiciones (por defecto)
+}
+
+def _load_settings():
+    try:
+        with open(SETTINGS_FILE) as f:
+            stored = json.load(f)
+        cfg = dict(DEFAULT_SETTINGS)
+        cfg.update(stored)
+        return cfg
+    except Exception:
+        return dict(DEFAULT_SETTINGS)
+
+def _save_settings(new_cfg):
+    try:
+        d = os.path.dirname(SETTINGS_FILE)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        cfg = _load_settings()
+        cfg.update(new_cfg)
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"[settings save error] {e}")
+        return False
+
+
+# ── /api/settings ─────────────────────────────────────────────────────────────
+@app.route("/api/settings", methods=["GET"])
+def api_get_settings():
+    return jsonify({"ok": True, "settings": _load_settings()})
+
+@app.route("/api/settings", methods=["POST"])
+def api_save_settings():
+    data = request.get_json(silent=True) or {}
+    # Validaciones básicas
+    if "n_fotos" in data:
+        data["n_fotos"] = max(1, min(10, int(data["n_fotos"])))
+    if "margen_pct" in data:
+        data["margen_pct"] = max(0, min(100, int(data["margen_pct"])))
+    if "reserva_anticipo" in data:
+        data["reserva_anticipo"] = max(0, min(100, int(data["reserva_anticipo"])))
+    if "dias_historial" in data:
+        data["dias_historial"] = max(7, min(90, int(data["dias_historial"])))
+    ok = _save_settings(data)
+    return jsonify({"ok": ok, "settings": _load_settings()})
+
+
 # ── /health ──────────────────────────────────────────────────────────────────
 @app.route("/health", methods=["GET"])
 def health():
@@ -2577,8 +2637,10 @@ def nuevo_presupuesto():
 
         # ── Enviar WhatsApp al cliente ──
         nombre_corto = nombre.split()[0].title() if nombre else "!"
+        _post_cfg  = _load_settings()
+        _msg_intro = _post_cfg.get("msg_intro", "Te preparamos una propuesta de alojamiento en Porto de Galinhas.")
         msg = ("\U0001f30a Hola *" + nombre_corto + "*!\n\n"
-               "Te preparamos una propuesta de alojamiento en Porto de Galinhas.\n\n"
+               + _msg_intro + "\n\n"
                "\U0001f4cc Ver opciones y confirmar:\n" + short_url)
         wa_ok = _evo_send_text(wa_dest, msg)
 
@@ -2628,7 +2690,11 @@ def nuevo_presupuesto():
         except Exception:
             pass
 
-    def _opt_fields(sfx, label):
+    cfg      = _load_settings()
+    n_fotos  = cfg.get("n_fotos", 8)
+    cfg_json = json.dumps(cfg, ensure_ascii=False)
+
+    def _opt_fields(sfx, label, n_fotos=8):
         """Genera el bloque HTML de campos para una opción."""
         def fi(name, lbl, typ="text", ph="", extra=""):
             return ("<div class='field'><label class='lbl'>"+lbl+"</label>"
@@ -2651,7 +2717,7 @@ def nuevo_presupuesto():
             "(this,"+str(fi2)+")' style='display:none'>&#128247; Foto "+str(fi2)+"</label>"
             "<span class='fstatus' id='fst"+sfx+"-"+str(fi2)+"'></span>"
             "<input type='hidden' name='foto"+str(fi2)+"_up"+sfx+"' id='furl"+sfx+"-"+str(fi2)+"' value=''></div>"
-            for fi2 in range(1, 6)
+            for fi2 in range(1, n_fotos + 1)
         )
         return (
             "<div class='card'><h2>"+label+"</h2>"
@@ -2744,6 +2810,29 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
 .hbtn-send{background:#3D3D3D;color:#fff}
 .hbtn:disabled{opacity:.5;cursor:not-allowed}
 .edit-banner{background:#fff3cd;border-left:4px solid #ffc107;padding:10px 14px;margin:10px 12px 0;border-radius:6px;font-size:13px;color:#856404}
+/* ── Modal ajustes ── */
+.cfg-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:flex-end}
+.cfg-modal.open{display:flex}
+.cfg-sheet{background:#fff;border-radius:20px 20px 0 0;width:100%;max-height:92vh;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom,20px)}
+.cfg-header{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;border-bottom:1px solid #eee;position:sticky;top:0;background:#fff;z-index:1}
+.cfg-title{font-size:15px;font-weight:700;color:#3D3D3D}
+.cfg-close{background:none;border:none;font-size:24px;color:#aaa;cursor:pointer;line-height:1;padding:0 4px}
+.cfg-body{padding:16px 18px}
+.cfg-section-title{font-size:11px;font-weight:700;text-transform:uppercase;color:#87A286;letter-spacing:.8px;margin:18px 0 10px}
+.cfg-section-title:first-child{margin-top:0}
+.cfg-row{margin-bottom:14px}
+.cfg-lbl{display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:5px}
+.cfg-lbl small{font-weight:400;color:#aaa}
+.cfg-input{width:100%;border:1.5px solid #ddd;border-radius:10px;padding:9px 12px;font-size:14px;font-family:inherit;color:#3D3D3D;background:#fff}
+.cfg-input:focus{outline:none;border-color:#87A286}
+.cfg-range-row{display:flex;align-items:center;gap:10px}
+.cfg-range{flex:1;accent-color:#87A286;height:6px}
+.cfg-range-val{min-width:40px;text-align:right;font-size:14px;font-weight:700;color:#3D3D3D}
+.cfg-checks{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+.cfg-check-lbl{display:flex;align-items:center;gap:5px;font-size:13px;color:#3D3D3D;background:#EDE9E3;padding:7px 11px;border-radius:8px;cursor:pointer}
+.cfg-check-lbl input{accent-color:#87A286;width:15px;height:15px}
+.cfg-save{width:100%;padding:14px;background:#87A286;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:6px}
+.cfg-save:active{background:#6e8b6d}
 """
     opt2_display = "display:none"
     html_np = (
@@ -2755,9 +2844,10 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "<div class='header'><div class='logo'>PORTO FLATS</div>"
         "<div class='logo-sub'>Nuevo presupuesto manual</div></div>\n"
         "<div class='int-panel'>"
-        "<span class='int-title'>⚙️ Panel de Ejecución</span>"
+        "<span class='int-title'>📋 Panel de Ejecución</span>"
         "<div class='int-actions'>"
         "<button type='button' class='btn-hist-trigger' onclick='openHistorial()'>📋 Historial</button>"
+        "<button type='button' class='btn-hist-trigger' onclick='openSettings()'>⚙️ Ajustes</button>"
         "</div></div>\n"
         + ("<div class='edit-banner'>✏️ Editando propuesta anterior — modificá los campos y enviá de nuevo.</div>\n"
            if edit_id else "")
@@ -2797,12 +2887,12 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "<input type='email' name='email_cliente' placeholder='cliente@email.com'></div>"
         "</div>\n"
         # ── Opción 1 ──
-        + _opt_fields("_0", "\U0001f3e0 Opci\xf3n 1")
+        + _opt_fields("_0", "\U0001f3e0 Opci\xf3n 1", n_fotos=n_fotos)
         # ── Botón agregar opción 2 ──
         + "<div class='btn-add-opt' onclick='showOpt2()'>+ Agregar opci\xf3n 2 (opcional)</div>\n"
         # ── Opción 2 (oculta) ──
         + "<div id='opt2-block' style='"+opt2_display+"'>"
-        + _opt_fields("_1", "\U0001f3e0 Opci\xf3n 2")
+        + _opt_fields("_1", "\U0001f3e0 Opci\xf3n 2", n_fotos=n_fotos)
         + "<div style='text-align:center;margin:0 12px 8px'><button type='button' onclick='hideOpt2()' "
           "style='background:none;border:none;color:#aaa;font-size:13px;cursor:pointer'>✕ Quitar opci\xf3n 2</button></div>"
         + "</div>\n"
@@ -2944,6 +3034,80 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "const EDIT_DATA=" + edit_data_json + ";\n"
         "if(EDIT_DATA){fillForm(EDIT_DATA);}\n"
         "if(location.hash==='#historial'){openHistorial();}\n"
+        # ── Settings JS ──────────────────────────────────────────────────────
+        "// ── Configuración ──\n"
+        "const CFG=" + cfg_json + ";\n"
+        "function openSettings(){\n"
+        "  const m=document.getElementById('cfg-modal');\n"
+        "  m.classList.add('open');\n"
+        "  document.body.style.overflow='hidden';\n"
+        "  _cfgLoad();\n"
+        "}\n"
+        "function closeSettings(){\n"
+        "  document.getElementById('cfg-modal').classList.remove('open');\n"
+        "  document.body.style.overflow='';\n"
+        "}\n"
+        "function _cfgLoad(){\n"
+        "  fetch('/api/settings').then(r=>r.json()).then(d=>{\n"
+        "    const s=d.settings||{};\n"
+        "    const nf=document.getElementById('cfg-nfotos');\n"
+        "    if(nf){nf.value=s.n_fotos||8;document.getElementById('cfg-nfotos-val').textContent=s.n_fotos||8;}\n"
+        "    const mp=document.getElementById('cfg-margen');\n"
+        "    if(mp){mp.value=s.margen_pct||25;document.getElementById('cfg-margen-val').textContent=(s.margen_pct||25)+'%';}\n"
+        "    const ap=document.getElementById('cfg-anticipo');\n"
+        "    if(ap){ap.value=s.reserva_anticipo||50;document.getElementById('cfg-anticipo-val').textContent=(s.reserva_anticipo||50)+'%';}\n"
+        "    const sp=document.getElementById('cfg-saldo');\n"
+        "    if(sp){sp.value=s.saldo_plazo||'15 días antes del check-in';}\n"
+        "    const mi=document.getElementById('cfg-msgintro');\n"
+        "    if(mi){mi.value=s.msg_intro||'';}\n"
+        "    const dh=document.getElementById('cfg-dias');\n"
+        "    if(dh){dh.value=s.dias_historial||45;document.getElementById('cfg-dias-val').textContent=(s.dias_historial||45)+' días';}\n"
+        "    const ce=document.getElementById('cfg-condextra');\n"
+        "    if(ce){ce.value=s.cond_extra_default||'';}\n"
+        "    const fps=s.forma_pago_defaults||['fp_transf'];\n"
+        "    ['fp_efectivo','fp_transf','fp_pix','fp_cripto','fp_tarjeta'].forEach(k=>{\n"
+        "      const el=document.getElementById('cfg-'+k);\n"
+        "      if(el)el.checked=fps.includes(k);\n"
+        "    });\n"
+        "  });\n"
+        "}\n"
+        "function _cfgRange(id,valId,suffix){\n"
+        "  const el=document.getElementById(id);\n"
+        "  const vl=document.getElementById(valId);\n"
+        "  if(el&&vl){el.addEventListener('input',()=>vl.textContent=el.value+(suffix||''));}\n"
+        "}\n"
+        "_cfgRange('cfg-nfotos','cfg-nfotos-val','');\n"
+        "_cfgRange('cfg-margen','cfg-margen-val','%');\n"
+        "_cfgRange('cfg-anticipo','cfg-anticipo-val','%');\n"
+        "_cfgRange('cfg-dias','cfg-dias-val',' días');\n"
+        "function saveSettings(){\n"
+        "  const fps=[];\n"
+        "  ['fp_efectivo','fp_transf','fp_pix','fp_cripto','fp_tarjeta'].forEach(k=>{\n"
+        "    if(document.getElementById('cfg-'+k)&&document.getElementById('cfg-'+k).checked)fps.push(k);\n"
+        "  });\n"
+        "  const payload={\n"
+        "    n_fotos:parseInt(document.getElementById('cfg-nfotos').value)||8,\n"
+        "    margen_pct:parseInt(document.getElementById('cfg-margen').value)||25,\n"
+        "    reserva_anticipo:parseInt(document.getElementById('cfg-anticipo').value)||50,\n"
+        "    saldo_plazo:document.getElementById('cfg-saldo').value.trim(),\n"
+        "    msg_intro:document.getElementById('cfg-msgintro').value.trim(),\n"
+        "    dias_historial:parseInt(document.getElementById('cfg-dias').value)||45,\n"
+        "    cond_extra_default:document.getElementById('cfg-condextra').value.trim(),\n"
+        "    forma_pago_defaults:fps,\n"
+        "  };\n"
+        "  const btn=document.getElementById('cfg-save-btn');\n"
+        "  btn.disabled=true;btn.textContent='Guardando...';\n"
+        "  fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})\n"
+        "  .then(r=>r.json()).then(d=>{\n"
+        "    if(d.ok){\n"
+        "      btn.textContent='✅ Guardado';\n"
+        "      setTimeout(()=>location.reload(),600);\n"
+        "    } else {\n"
+        "      btn.textContent='❌ Error';\n"
+        "      btn.disabled=false;\n"
+        "    }\n"
+        "  }).catch(()=>{btn.textContent='❌ Error';btn.disabled=false;});\n"
+        "}\n"
         "</script>\n"
         # ── Modal historial ─────────────────────────────────────────────────
         "<div class='hist-modal' id='hist-modal' onclick='if(event.target===this)closeHistorial()'>\n"
@@ -2954,6 +3118,73 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "</div>\n"
         "<div id='hist-list'></div>\n"
         "</div></div>\n"
+        # ── Modal ajustes ────────────────────────────────────────────────────
+        "<div class='cfg-modal' id='cfg-modal' onclick='if(event.target===this)closeSettings()'>\n"
+        "<div class='cfg-sheet'>\n"
+        "<div class='cfg-header'>"
+        "<span class='cfg-title'>⚙️ Ajustes de plantilla</span>"
+        "<button class='cfg-close' onclick='closeSettings()'>×</button>"
+        "</div>\n"
+        "<div class='cfg-body'>\n"
+        # Fotos
+        "<p class='cfg-section-title'>📸 Fotos por opción</p>"
+        "<div class='cfg-row'>"
+        "<label class='cfg-lbl'>Cantidad de fotos <small>(1–10)</small></label>"
+        "<div class='cfg-range-row'>"
+        "<input type='range' class='cfg-range' id='cfg-nfotos' min='1' max='10' step='1' value='8'>"
+        "<span class='cfg-range-val' id='cfg-nfotos-val'>8</span>"
+        "</div></div>\n"
+        # Márgenes y pagos
+        "<p class='cfg-section-title'>💰 Precios y pagos</p>"
+        "<div class='cfg-row'>"
+        "<label class='cfg-lbl'>Margen sugerido <small>(% por defecto)</small></label>"
+        "<div class='cfg-range-row'>"
+        "<input type='range' class='cfg-range' id='cfg-margen' min='0' max='60' step='1' value='25'>"
+        "<span class='cfg-range-val' id='cfg-margen-val'>25%</span>"
+        "</div></div>\n"
+        "<div class='cfg-row'>"
+        "<label class='cfg-lbl'>Anticipo reserva <small>(% por defecto)</small></label>"
+        "<div class='cfg-range-row'>"
+        "<input type='range' class='cfg-range' id='cfg-anticipo' min='0' max='100' step='5' value='50'>"
+        "<span class='cfg-range-val' id='cfg-anticipo-val'>50%</span>"
+        "</div></div>\n"
+        "<div class='cfg-row'>"
+        "<label class='cfg-lbl'>Plazo saldo</label>"
+        "<input type='text' class='cfg-input' id='cfg-saldo' placeholder='15 días antes del check-in'>"
+        "</div>\n"
+        "<div class='cfg-row'>"
+        "<label class='cfg-lbl'>Formas de pago por defecto</label>"
+        "<div class='cfg-checks'>"
+        "<label class='cfg-check-lbl'><input type='checkbox' id='cfg-fp_transf'> Transferencia</label>"
+        "<label class='cfg-check-lbl'><input type='checkbox' id='cfg-fp_pix'> PIX</label>"
+        "<label class='cfg-check-lbl'><input type='checkbox' id='cfg-fp_efectivo'> Efectivo</label>"
+        "<label class='cfg-check-lbl'><input type='checkbox' id='cfg-fp_tarjeta'> Tarjeta</label>"
+        "<label class='cfg-check-lbl'><input type='checkbox' id='cfg-fp_cripto'> Cripto</label>"
+        "</div></div>\n"
+        # Mensaje WA
+        "<p class='cfg-section-title'>💬 Mensaje WhatsApp</p>"
+        "<div class='cfg-row'>"
+        "<label class='cfg-lbl'>Texto de introducción</label>"
+        "<textarea class='cfg-input' id='cfg-msgintro' rows='3' "
+        "placeholder='Te preparamos una propuesta de alojamiento en Porto de Galinhas.'></textarea>"
+        "</div>\n"
+        # Extras
+        "<p class='cfg-section-title'>📝 Condiciones extra</p>"
+        "<div class='cfg-row'>"
+        "<label class='cfg-lbl'>Condiciones por defecto <small>(se pre-llena en cada propuesta)</small></label>"
+        "<textarea class='cfg-input' id='cfg-condextra' rows='2' placeholder='Ej: Check-in 15h, check-out 11h'></textarea>"
+        "</div>\n"
+        # Historial
+        "<p class='cfg-section-title'>🗂 Historial</p>"
+        "<div class='cfg-row'>"
+        "<label class='cfg-lbl'>Retención de propuestas <small>(días)</small></label>"
+        "<div class='cfg-range-row'>"
+        "<input type='range' class='cfg-range' id='cfg-dias' min='7' max='90' step='1' value='45'>"
+        "<span class='cfg-range-val' id='cfg-dias-val'>45 días</span>"
+        "</div></div>\n"
+        "<button class='cfg-save' id='cfg-save-btn' onclick='saveSettings()'>💾 Guardar ajustes</button>\n"
+        "</div>\n"  # cfg-body
+        "</div></div>\n"  # cfg-sheet, cfg-modal
         "</body>\n</html>"
     )
     return Response(html_np.encode('utf-8'), content_type="text/html; charset=utf-8")
