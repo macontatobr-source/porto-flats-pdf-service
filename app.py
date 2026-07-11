@@ -3162,6 +3162,8 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "      const el=document.getElementById('cfg-'+k);\n"
         "      if(el)el.checked=fps.includes(k);\n"
         "    });\n"
+        "    const sve=document.getElementById('cfg-services');\n"
+        "    if(sve){sve.value=(s.custom_services||[]).join('\\n');}\n"
         "  });\n"
         "}\n"
         "function _cfgRange(id,valId,suffix){\n"
