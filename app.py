@@ -2289,6 +2289,15 @@ def propuesta():
                     rows_p += "<div class='pr-row'><span>\U0001f4c5 Noches</span><span>\xd7 "+str(n)+"</span></div>"
                 except Exception:
                     pass
+            if limpeza_v > 0:
+                rows_p += "<div class='pr-row'><span>\U0001f9f9 Tasa de limpieza</span><span>R$ "+str(int(limpeza_v))+"</span></div>"
+            for _svc in opt.get('servicios_extras', []):
+                try:
+                    _m = float(str(_svc.get('monto', 0)))
+                    if _m > 0:
+                        rows_p += "<div class='pr-row'><span>\u2795 "+str(_svc.get('nombre','Servicio'))+"</span><span>R$ "+str(int(_m))+"</span></div>"
+                except Exception:
+                    pass
             rows_p += "<div class='pr-row pr-total'><span>\U0001f4b0 Total</span><span>R$ "+str(int(preco_v))+"</span></div>"
             price_html = "<div class='card'><div class='sec-title'>Precio estimado</div><div class='pr-table'>"+rows_p+"</div></div>"
         map_html = ""
@@ -2305,9 +2314,8 @@ def propuesta():
             # Seguir redirect para links cortos
             if "maps.app.goo.gl" in url or "goo.gl/maps" in url:
                 try:
-                    import urllib.request as _ur2
-                    req = _ur2.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                    resolved = _ur2.urlopen(req, timeout=4).url
+                    _r2 = http.head(url, allow_redirects=True, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
+                    resolved = _r2.url
                 except Exception:
                     pass
             # Extraer lat/lng del patrón /@lat,lng o ?q=lat,lng
@@ -2586,6 +2594,9 @@ def nuevo_presupuesto():
         wa_dest = prefix + wa_num
 
         # ── Opciones ──
+        _post_cfg2   = _load_settings()
+        _custom_svcs = _post_cfg2.get('custom_services', [])
+
         def _build_opt(sfx):
             """Construye dict de opción desde campos del form con sufijo _0 o _1."""
             def fv(k): return request.form.get(k + sfx, "")
@@ -2602,8 +2613,19 @@ def nuevo_presupuesto():
                       "fp_pix":"PIX","fp_cripto":"Cripto","fp_tarjeta":"Tarjeta"}
             chosen = [labels[k] for k in fps if request.form.get(k+sfx)]
             if chosen: opt["forma_pago"] = " \xb7 ".join(chosen)
+            # servicios extras
+            if _custom_svcs:
+                _svcs_list = []
+                for _si, _sname in enumerate(_custom_svcs):
+                    _monto_str = fv('svc_' + str(_si) + '_monto')
+                    try: _monto = float(_monto_str or 0)
+                    except: _monto = 0
+                    if _monto > 0:
+                        _svcs_list.append({'nombre': _sname, 'monto': _monto})
+                if _svcs_list:
+                    opt['servicios_extras'] = _svcs_list
             # fotos
-            for fi in range(1, 6):
+            for fi in range(1, 11):
                 u = request.form.get("foto"+str(fi)+"_up"+sfx, "")
                 if u: opt["foto"+str(fi)+"_up"] = u
             return opt
@@ -2645,12 +2667,18 @@ def nuevo_presupuesto():
                        "reserva_anticipo","saldo_plazo","url","forma_pago"]:
                 v = request.form.get(_f + _sfx, "")
                 if v: form_dict[_f + _sfx] = v
-            for _fi in range(1, 6):
+            for _fi in range(1, 11):
                 v = request.form.get("foto" + str(_fi) + "_up" + _sfx, "")
                 if v: form_dict["foto" + str(_fi) + "_up" + _sfx] = v
             for _k in ["fp_efectivo","fp_transf","fp_pix","fp_cripto","fp_tarjeta"]:
                 v = request.form.get(_k + _sfx, "")
                 if v: form_dict[_k + _sfx] = "on"
+        # guardar servicios extras en form_dict
+        for _si2 in range(len(_custom_svcs)):
+            for _sfx3 in ['_0', '_1']:
+                _fk = 'svc_' + str(_si2) + '_monto' + _sfx3
+                _v = request.form.get(_fk, '')
+                if _v: form_dict[_fk] = _v
 
         # ── Guardar en store local (45 días) → URL limpia con dominio propio ──
         short_url = prop_url
@@ -2727,7 +2755,7 @@ def nuevo_presupuesto():
     n_fotos  = cfg.get("n_fotos", 8)
     cfg_json = json.dumps(cfg, ensure_ascii=False)
 
-    def _opt_fields(sfx, label, n_fotos=8):
+    def _opt_fields(sfx, label, n_fotos=8, custom_services=None):
         """Genera el bloque HTML de campos para una opción."""
         def fi(name, lbl, typ="text", ph="", extra=""):
             return ("<div class='field'><label class='lbl'>"+lbl+"</label>"
@@ -2807,6 +2835,13 @@ def nuevo_presupuesto():
             + fi("cond_extra","Nota libre en condiciones","text","Incluye ropa de cama...")
             + fps_html
             + "<div class='sep'></div>"
+            + ("".join(
+                "<div class='field'><label class='lbl' style='color:#888;font-weight:500'>\u2795 "
+                + str(_sn) + " R$</label>"
+                "<input type='number' name='svc_" + str(_si) + "_monto" + sfx + "' "
+                "placeholder='0' min='0'></div>"
+                for _si, _sn in enumerate(custom_services or [])
+               ) if custom_services else "")
             + fi("mapa_url","\U0001f4cd Link Google Maps (cualquier link, desde celular o web)","url","https://maps.app.goo.gl/...")
             + fi("observaciones","Observaciones para el cliente","text","Check-in 14hs...")
             + "<div class='sep'></div>"
@@ -2955,12 +2990,12 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "<input type='email' name='email_cliente' placeholder='cliente@email.com'></div>"
         "</div>\n"
         # ── Opción 1 ──
-        + _opt_fields("_0", "\U0001f3e0 Opci\xf3n 1", n_fotos=n_fotos)
+        + _opt_fields("_0", "\U0001f3e0 Opci\xf3n 1", n_fotos=n_fotos, custom_services=cfg.get("custom_services", []))
         # ── Botón agregar opción 2 ──
         + "<div class='btn-add-opt' onclick='showOpt2()'>+ Agregar opci\xf3n 2 (opcional)</div>\n"
         # ── Opción 2 (oculta) ──
         + "<div id='opt2-block' style='"+opt2_display+"'>"
-        + _opt_fields("_1", "\U0001f3e0 Opci\xf3n 2", n_fotos=n_fotos)
+        + _opt_fields("_1", "\U0001f3e0 Opci\xf3n 2", n_fotos=n_fotos, custom_services=cfg.get("custom_services", []))
         + "<div style='text-align:center;margin:0 12px 8px'><button type='button' onclick='hideOpt2()' "
           "style='background:none;border:none;color:#aaa;font-size:13px;cursor:pointer'>✕ Quitar opci\xf3n 2</button></div>"
         + "</div>\n"
@@ -3134,6 +3169,10 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "  const m=document.getElementById('cfg-modal');\n"
         "  m.classList.add('open');\n"
         "  document.body.style.overflow='hidden';\n"
+        "  _cfgRange('cfg-nfotos','cfg-nfotos-val','');\n"
+        "  _cfgRange('cfg-margen','cfg-margen-val','%');\n"
+        "  _cfgRange('cfg-anticipo','cfg-anticipo-val','%');\n"
+        "  _cfgRange('cfg-dias','cfg-dias-val',' días');\n"
         "  _cfgLoad();\n"
         "}\n"
         "function closeSettings(){\n"
@@ -3171,15 +3210,13 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "  const vl=document.getElementById(valId);\n"
         "  if(el&&vl){el.addEventListener('input',()=>vl.textContent=el.value+(suffix||''));}\n"
         "}\n"
-        "_cfgRange('cfg-nfotos','cfg-nfotos-val','');\n"
-        "_cfgRange('cfg-margen','cfg-margen-val','%');\n"
-        "_cfgRange('cfg-anticipo','cfg-anticipo-val','%');\n"
-        "_cfgRange('cfg-dias','cfg-dias-val',' días');\n"
         "function saveSettings(){\n"
         "  const fps=[];\n"
         "  ['fp_efectivo','fp_transf','fp_pix','fp_cripto','fp_tarjeta'].forEach(k=>{\n"
         "    if(document.getElementById('cfg-'+k)&&document.getElementById('cfg-'+k).checked)fps.push(k);\n"
         "  });\n"
+        "  const svEl=document.getElementById('cfg-services');\n"
+        "  const svcs=svEl?svEl.value.split('\\n').map(s=>s.trim()).filter(s=>s):[];\n"
         "  const payload={\n"
         "    n_fotos:parseInt(document.getElementById('cfg-nfotos').value)||8,\n"
         "    margen_pct:parseInt(document.getElementById('cfg-margen').value)||25,\n"
@@ -3189,6 +3226,7 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "    dias_historial:parseInt(document.getElementById('cfg-dias').value)||45,\n"
         "    cond_extra_default:document.getElementById('cfg-condextra').value.trim(),\n"
         "    forma_pago_defaults:fps,\n"
+        "    custom_services:svcs,\n"
         "  };\n"
         "  const btn=document.getElementById('cfg-save-btn');\n"
         "  btn.disabled=true;btn.textContent='Guardando...';\n"
