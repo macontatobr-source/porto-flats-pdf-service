@@ -285,6 +285,18 @@ def api_get_propuesta(prop_id):
     return jsonify({"ok": True, "propuesta": entry})
 
 
+# ── /api/eliminar/<prop_id> ───────────────────────────────────────────────────
+@app.route("/api/eliminar/<prop_id>", methods=["DELETE"])
+def api_eliminar(prop_id):
+    """Elimina una propuesta del historial."""
+    store = _load_proposals()
+    if prop_id not in store:
+        return jsonify({"error": "No encontrada o ya eliminada"}), 404
+    del store[prop_id]
+    _save_proposals(store)
+    return jsonify({"ok": True})
+
+
 # ── /api/reenviar/<prop_id> ───────────────────────────────────────────────────
 @app.route("/api/reenviar/<prop_id>", methods=["POST"])
 def api_reenviar(prop_id):
@@ -2599,7 +2611,10 @@ def nuevo_presupuesto():
         opt0 = _build_opt("_0")
         opt1 = _build_opt("_1")
         opciones = [opt0]
-        if any(opt1.values()): opciones.append(opt1)
+        # Solo incluir opción 2 si el usuario completó campos significativos
+        # n_noites no cuenta porque calcNoches() lo auto-llena aunque la opción no esté activa
+        if opt1.get("nome") or opt1.get("preco_noche") or opt1.get("preco_total"):
+            opciones.append(opt1)
 
         # ── Generar URL con datos comprimidos + codificados (sin depender de Sheets) ──
         import base64 as _b64, zlib as _zlib
@@ -2690,7 +2705,7 @@ def nuevo_presupuesto():
             + "<a href='" + short_url + "' class='btn btn-green' target='_blank'>\U0001f440 Ver propuesta del cliente</a>"
             "<p style='font-size:12px;color:#aaa;margin-top:4px;word-break:break-all'>"+short_url+"</p>"
             "<a href='/nuevo-presupuesto' class='btn btn-outline'>➕ Nueva propuesta</a>"
-            "<a href='/nuevo-presupuesto#historial' class='btn btn-outline' style='margin-top:6px'>📋 Ver historial</a>"
+            "<a href='/nuevo-presupuesto?open=historial' class='btn btn-outline' style='margin-top:6px'>📋 Ver historial</a>"
             "</div></body></html>"
         )
         return Response(html_ok.encode("utf-8"), content_type="text/html; charset=utf-8")
@@ -2859,6 +2874,8 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
 .hbtn-view{background:#EDE9E3;color:#3D3D3D}
 .hbtn-edit{background:#87A286;color:#fff}
 .hbtn-send{background:#3D3D3D;color:#fff}
+.hbtn-del{background:#fee2e2;color:#b91c1c;padding:7px 10px}
+.hbtn-del:hover{background:#fecaca}
 .hbtn:disabled{opacity:.5;cursor:not-allowed}
 .edit-banner{background:#fff3cd;border-left:4px solid #ffc107;padding:10px 14px;margin:10px 12px 0;border-radius:6px;font-size:13px;color:#856404}
 /* ── Modal ajustes ── */
@@ -3041,6 +3058,7 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "        +`<a href='${p.short_url}' target='_blank' class='hbtn hbtn-view'>👁 Ver</a>`\n"
         "        +`<button class='hbtn hbtn-edit' onclick='editProp(\"${p.id}\")'>✏️ Editar</button>`\n"
         "        +`<button class='hbtn hbtn-send' id='rb-${p.id}' onclick='reenviarProp(\"${p.id}\")'>📤 Reenviar</button>`\n"
+        "        +`<button class='hbtn hbtn-del' onclick='eliminarProp(\"${p.id}\",this)' title='Eliminar'>✕</button>`\n"
         "        +`</div></div>`;\n"
         "    }).join('');\n"
         "  }catch(e){\n"
@@ -3060,6 +3078,18 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "    if(btn){btn.textContent=j.ok?'✅ Enviado':'❌ Error';}\n"
         "    if(!j.ok&&btn){btn.disabled=false;}\n"
         "  }catch(e){if(btn){btn.textContent='❌ Error';btn.disabled=false;}}\n"
+        "}\n"
+        "async function eliminarProp(id,btn){\n"
+        "  if(!confirm('\\u00bfEliminar esta propuesta del historial?'))return;\n"
+        "  btn.disabled=true;btn.textContent='...';\n"
+        "  try{\n"
+        "    const r=await fetch('/api/eliminar/'+id,{method:'DELETE'});\n"
+        "    const j=await r.json();\n"
+        "    if(j.ok){\n"
+        "      const item=btn.closest('.hist-item');\n"
+        "      if(item){item.style.opacity='0';item.style.transition='opacity .3s';setTimeout(()=>item.remove(),300);}\n"
+        "    }else{btn.disabled=false;btn.textContent='\\u2715';alert('Error al eliminar.');}\n"
+        "  }catch(e){btn.disabled=false;btn.textContent='\\u2715';}\n"
         "}\n"
         "async function editProp(id){\n"
         "  closeHistorial();\n"
@@ -3096,7 +3126,7 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         # ── Pre-cargar desde ?edit=ID (en carga de página) ──────────────────
         "const EDIT_DATA=" + edit_data_json + ";\n"
         "if(EDIT_DATA){fillForm(EDIT_DATA);}\n"
-        "if(location.hash==='#historial'){openHistorial();}\n"
+        "if(new URLSearchParams(location.search).get('open')==='historial'){setTimeout(openHistorial,300);}\n"
         # ── Settings JS ──────────────────────────────────────────────────────
         "// ── Configuración ──\n"
         "const CFG=" + cfg_json + ";\n"
@@ -3198,7 +3228,7 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "<span class='cfg-range-val' id='cfg-nfotos-val'>8</span>"
         "</div></div>\n"
         # Márgenes y pagos
-        "<p class='cfg-section-title'>💰 Precios y pagos</p>"
+        "<p class='cfg-section-title'>\U0001f4b0 Precios y pagos</p>"
         "<div class='cfg-row'>"
         "<label class='cfg-lbl'>Margen sugerido <small>(% por defecto)</small></label>"
         "<div class='cfg-range-row'>"
@@ -3213,7 +3243,7 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "</div></div>\n"
         "<div class='cfg-row'>"
         "<label class='cfg-lbl'>Plazo saldo</label>"
-        "<input type='text' class='cfg-input' id='cfg-saldo' placeholder='15 días antes del check-in'>"
+        "<input type='text' class='cfg-input' id='cfg-saldo' placeholder='15 d\xedas antes del check-in'>"
         "</div>\n"
         "<div class='cfg-row'>"
         "<label class='cfg-lbl'>Formas de pago por defecto</label>"
@@ -3224,35 +3254,31 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "<label class='cfg-check-lbl'><input type='checkbox' id='cfg-fp_tarjeta'> Tarjeta</label>"
         "<label class='cfg-check-lbl'><input type='checkbox' id='cfg-fp_cripto'> Cripto</label>"
         "</div></div>\n"
-        # Mensaje WA
-        "<p class='cfg-section-title'>💬 Mensaje WhatsApp</p>"
+        "<p class='cfg-section-title'>\U0001f4ac Mensaje WhatsApp</p>"
         "<div class='cfg-row'>"
-        "<label class='cfg-lbl'>Texto de introducción</label>"
+        "<label class='cfg-lbl'>Intro del mensaje al cliente</label>"
         "<textarea class='cfg-input' id='cfg-msgintro' rows='3' "
         "placeholder='Te preparamos una propuesta de alojamiento en Porto de Galinhas.'></textarea>"
         "</div>\n"
-        # Extras
-        "<p class='cfg-section-title'>📝 Condiciones extra</p>"
+        "<p class='cfg-section-title'>\U0001f4cb Condiciones y retenci\xf3n</p>"
         "<div class='cfg-row'>"
-        "<label class='cfg-lbl'>Condiciones por defecto <small>(se pre-llena en cada propuesta)</small></label>"
-        "<textarea class='cfg-input' id='cfg-condextra' rows='2' placeholder='Ej: Check-in 15h, check-out 11h'></textarea>"
+        "<label class='cfg-lbl'>Condici\xf3n extra por defecto</label>"
+        "<input type='text' class='cfg-input' id='cfg-condextra' "
+        "placeholder='Incluye ropa de cama y toallas.'>"
         "</div>\n"
-        # Historial
-        "<p class='cfg-section-title'>🗂 Historial</p>"
         "<div class='cfg-row'>"
-        "<label class='cfg-lbl'>Retención de propuestas <small>(días)</small></label>"
+        "<label class='cfg-lbl'>D\xedas de historial</label>"
         "<div class='cfg-range-row'>"
         "<input type='range' class='cfg-range' id='cfg-dias' min='7' max='90' step='1' value='45'>"
-        "<span class='cfg-range-val' id='cfg-dias-val'>45 días</span>"
+        "<span class='cfg-range-val' id='cfg-dias-val'>45 d\xedas</span>"
         "</div></div>\n"
-        "<button class='cfg-save' id='cfg-save-btn' onclick='saveSettings()'>💾 Guardar ajustes</button>\n"
-        "</div>\n"  # cfg-body
-        "</div></div>\n"  # cfg-sheet, cfg-modal
-        "</body>\n</html>"
+        "<button class='cfg-save' id='cfg-save-btn' onclick='saveSettings()'>Guardar ajustes</button>"
+        "</div>\n"
+        "</div></div>\n"
+        "</body></html>"
     )
-    return Response(html_np.encode('utf-8'), content_type="text/html; charset=utf-8")
+    return Response(html_np.encode("utf-8"), content_type="text/html; charset=utf-8")
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), debug=False)
