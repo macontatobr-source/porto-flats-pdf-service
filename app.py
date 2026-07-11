@@ -490,6 +490,8 @@ h1{font-size:24px;font-weight:400;line-height:1.3}
 .pr-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;font-size:14px;border-bottom:1px solid rgba(0,0,0,.06)}
 .pr-row:last-child{border-bottom:none}
 .pr-total{font-weight:700;font-size:16px;color:#87A286;padding-top:12px;margin-top:4px;border-top:2px solid rgba(135,162,134,.3)!important;border-bottom:none!important}
+.pr-discount{background:rgba(135,162,134,.08);border-radius:6px;padding:10px 6px!important;margin:4px -6px}
+.disc-tag{background:#FF6B35;color:#fff;font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;margin-left:4px;vertical-align:middle}
 .dates-box{background:#EDE9E3;border-radius:10px;padding:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .date-item{flex:1;min-width:90px}
 .date-label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#87A286;margin-bottom:3px}
@@ -2212,13 +2214,17 @@ def propuesta():
         amenidades = opt.get("amenidades", "")
         mapa_url   = opt.get("mapa_url",   "")
         observ     = opt.get("observaciones","")
-        preco_raw  = opt.get("preco_total",  opt.get("total_brl", 0))
-        limpeza_raw = opt.get("taxa_limpeza", opt.get("limpieza_brl", 0))
+        preco_raw      = opt.get("preco_total",      opt.get("total_brl", 0))
+        limpeza_raw    = opt.get("taxa_limpeza",     opt.get("limpieza_brl", 0))
+        noche_raw      = opt.get("preco_noche",      "")
+        descuento_raw  = opt.get("preco_descuento",  "")
         try:
-            preco_v   = float(str(preco_raw).replace(",",".") or 0)
-            limpeza_v = float(str(limpeza_raw).replace(",",".") or 0)
+            preco_v     = float(str(preco_raw).replace(",",".") or 0)
+            limpeza_v   = float(str(limpeza_raw).replace(",",".") or 0)
+            noche_v     = float(str(noche_raw).replace(",",".") or 0)   if noche_raw    else 0
+            descuento_v = float(str(descuento_raw).replace(",",".") or 0) if descuento_raw else 0
         except Exception:
-            preco_v = limpeza_v = 0
+            preco_v = limpeza_v = noche_v = descuento_v = 0
         fotos = []
         for fi in range(1, 11):
             u = opt.get("foto"+str(fi)+"_up","") or opt.get("foto"+str(fi),"") or opt.get("f"+str(fi),"")
@@ -2249,17 +2255,29 @@ def propuesta():
         price_html = ""
         if preco_v > 0:
             rows_p = ""
+            has_descuento = descuento_v > 0 and noche_v > 0 and descuento_v < noche_v
             if noites:
                 try:
                     n = int(noites)
-                    diaria = (preco_v - limpeza_v) / n if n else preco_v
-                    rows_p += "<div class='pr-row'><span>\U0001f319 Precio por noche</span><span>R$ "+str(int(diaria))+"</span></div>"
+                    if has_descuento:
+                        # Precio regular tachado
+                        rows_p += ("<div class='pr-row'>"
+                                   "<span>\U0001f319 Precio regular/noche</span>"
+                                   "<span style='text-decoration:line-through;color:#bbb'>R$ "+str(int(noche_v))+"</span>"
+                                   "</div>")
+                        # Precio con descuento resaltado
+                        pct_desc = round((noche_v - descuento_v) / noche_v * 100)
+                        rows_p += ("<div class='pr-row pr-discount'>"
+                                   "<span>\U0001f4b8 Precio especial/noche "
+                                   "<span class='disc-tag'>-"+str(pct_desc)+"%</span></span>"
+                                   "<span style='font-weight:700;color:#87A286'>R$ "+str(int(descuento_v))+"</span>"
+                                   "</div>")
+                    elif noche_v > 0:
+                        rows_p += "<div class='pr-row'><span>\U0001f319 Precio por noche</span><span>R$ "+str(int(noche_v))+"</span></div>"
                     rows_p += "<div class='pr-row'><span>\U0001f4c5 Noches</span><span>\xd7 "+str(n)+"</span></div>"
                 except Exception:
                     pass
-            if limpeza_v > 0:
-                rows_p += "<div class='pr-row'><span>\U0001f9f9 Limpieza</span><span>R$ "+str(int(limpeza_v))+"</span></div>"
-            rows_p += "<div class='pr-row pr-total'><span>\U0001f4b0 Total estimado</span><span>R$ "+str(int(preco_v))+"</span></div>"
+            rows_p += "<div class='pr-row pr-total'><span>\U0001f4b0 Total</span><span>R$ "+str(int(preco_v))+"</span></div>"
             price_html = "<div class='card'><div class='sec-title'>Precio estimado</div><div class='pr-table'>"+rows_p+"</div></div>"
         map_html = ""
         import re as _re
@@ -2562,7 +2580,7 @@ def nuevo_presupuesto():
             opt = {}
             for f in ["nome","distancia","quartos","banheiros","hospedes","amenidades",
                       "preco_total","taxa_limpeza","mapa_url","observaciones","cond_extra",
-                      "preco_noche","n_noites","margen_pct","preco_sugerido","ganancia_r",
+                      "preco_noche","preco_descuento","n_noites","margen_pct","ganancia_r",
                       "reserva_anticipo","saldo_plazo","url"]:
                 v = fv(f)
                 if v: opt[f] = v
@@ -2608,7 +2626,7 @@ def nuevo_presupuesto():
         for _sfx in ["_0", "_1"]:
             for _f in ["nome","distancia","quartos","banheiros","hospedes","amenidades",
                        "preco_total","taxa_limpeza","mapa_url","observaciones","cond_extra",
-                       "preco_noche","n_noites","margen_pct","preco_sugerido","ganancia_r",
+                       "preco_noche","preco_descuento","n_noites","margen_pct","ganancia_r",
                        "reserva_anticipo","saldo_plazo","url","forma_pago"]:
                 v = request.form.get(_f + _sfx, "")
                 if v: form_dict[_f + _sfx] = v
@@ -2729,20 +2747,45 @@ def nuevo_presupuesto():
                    fi("hospedes","Personas","number","2","min='1' max='30'"))
             + fi("amenidades","Amenidades (separadas por coma)","text","Wi-Fi, A/C, Piscina")
             + "<div class='sep'></div>"
-            + frow(fi("preco_noche","Precio/noche R$","number","400",
-                      "id='pnoche"+sfx+"' min='0' oninput='calcNP(\""+sfx+"\",\"base\")'"),
-                   fi("n_noites","N\xb0 diarias","number","5",
-                      "id='nnoites"+sfx+"' min='1' max='365' oninput='calcNP(\""+sfx+"\",\"base\")'"))
-            + fi("taxa_limpeza","Tasa de limpieza R$","number","0",
-                 "id='tlimpeza"+sfx+"' min='0' oninput='calcNP(\""+sfx+"\",\"base\")'")
-            + "<div class='sep'></div>"
-            + frow(fi("preco_sugerido","Total sugerido R$ <small style='color:#aaa'>(editable)</small>","number","0",
-                      "id='psugerido"+sfx+"' class='inp-hl' min='0' step='1' oninput='calcNP(\""+sfx+"\",\"sug\")'"),
-                   fi("margen_pct","Margen %","number","25",
-                      "id='mpct"+sfx+"' min='0' oninput='calcNP(\""+sfx+"\",\"pct\")' step='1'"))
-            + fi("ganancia_r","Ganancia R$","number","0",
-                 "id='ganancia"+sfx+"' class='inp-green' min='0' step='1' oninput='calcNP(\""+sfx+"\",\"gan\")'")
+            # ── Precios ──
+            + "<div class='row'>"
+              "<div class='field' style='flex:1'><label class='lbl'>Diaria regular R$</label>"
+              "<input type='number' name='preco_noche"+sfx+"' id='pnoche"+sfx+"' placeholder='500' min='0' "
+              "oninput='calcNP(\""+sfx+"\")'></div>"
+              "<div class='field' style='flex:1'><label class='lbl'>Diaria con descuento R$ <small style='color:#aaa'>(opcional)</small></label>"
+              "<div style='display:flex;gap:6px;align-items:center'>"
+              "<input type='number' name='preco_descuento"+sfx+"' id='pdesc"+sfx+"' placeholder='—' min='0' "
+              "style='flex:1' oninput='calcNP(\""+sfx+"\")'>"
+              "<div class='desc-badge' id='pbadge"+sfx+"'>—</div>"
+              "</div></div>"
+              "</div>"
+            + "<div class='row'>"
+              "<div class='field' style='flex:1'><label class='lbl'>N\xba noches</label>"
+              "<input type='number' name='n_noites"+sfx+"' id='nnoites"+sfx+"' placeholder='—' min='1' max='365' "
+              "oninput='calcNP(\""+sfx+"\")'></div>"
+              "<div class='field' style='flex:1'><label class='lbl'>Tasa de limpieza R$</label>"
+              "<input type='number' name='taxa_limpeza"+sfx+"' id='tlimpeza"+sfx+"' placeholder='0' min='0' "
+              "oninput='calcNP(\""+sfx+"\")'></div>"
+              "</div>"
+            + "<div class='calc-display-row'>"
+              "<span class='calc-display-lbl'>Subtotal</span>"
+              "<span class='calc-display-val' id='psubtotal"+sfx+"'>—</span>"
+              "</div>"
+            + "<div class='row'>"
+              "<div class='field' style='flex:1'><label class='lbl'>Margen ganancia %</label>"
+              "<input type='number' name='margen_pct"+sfx+"' id='mpct"+sfx+"' placeholder='0' min='0' max='100' step='1' "
+              "oninput='calcNP(\""+sfx+"\")'></div>"
+              "<div class='field' style='flex:1'><label class='lbl'>Ganancia R$</label>"
+              "<div class='calc-display-row' style='height:42px;margin:0'>"
+              "<span class='calc-display-val inp-green' id='ganancia"+sfx+"'>—</span>"
+              "</div></div>"
+              "</div>"
+            + "<div class='calc-display-row calc-total'>"
+              "<span class='calc-display-lbl'>TOTAL</span>"
+              "<span class='calc-display-val' id='ptotal-disp"+sfx+"'>—</span>"
+              "</div>"
             + "<input type='hidden' id='ptotal"+sfx+"' name='preco_total"+sfx+"' value=''>"
+            + "<input type='hidden' name='ganancia_r"+sfx+"' id='ganancia-hid"+sfx+"' value=''>"
             + "<div class='sep'></div>"
             + frow(fi("reserva_anticipo","Anticipo %","number","50","min='0' max='100'"),
                    fi("saldo_plazo","Saldo antes del check-in","text","15 d\xedas"))
@@ -2777,6 +2820,14 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
 .pago-opt{display:flex;align-items:center;gap:5px;font-size:13px;background:#EDE9E3;padding:6px 10px;border-radius:20px;cursor:pointer}
 .pago-opt input{width:15px;height:15px;accent-color:#87A286}
 .noches-badge{background:#e8f5e9;border-radius:9px;padding:10px 12px;font-size:15px;font-weight:700;color:#2e7d32;border:1.5px solid #c8e6c9}
+.desc-badge{background:#FFF3E0;border:1.5px solid #FFA726;border-radius:9px;padding:10px 10px;font-size:13px;font-weight:700;color:#E65100;min-width:52px;text-align:center;white-space:nowrap;flex-shrink:0}
+.desc-badge.empty{background:#F5F2EE;border-color:#ddd;color:#ccc}
+.calc-display-row{display:flex;justify-content:space-between;align-items:center;background:#F5F2EE;border-radius:9px;padding:10px 14px;margin-bottom:11px}
+.calc-display-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#999}
+.calc-display-val{font-size:15px;font-weight:700;color:#3D3D3D}
+.calc-display-row.calc-total{background:#87A286}
+.calc-display-row.calc-total .calc-display-lbl{color:rgba(255,255,255,.8)}
+.calc-display-row.calc-total .calc-display-val{color:#fff;font-size:17px}
 .wa-row{display:flex;gap:8px;align-items:flex-end}
 .wa-sel{width:100px;flex-shrink:0}
 .btn-add-opt{display:block;margin:0 12px 12px;border:2px dashed #CDC6C3;border-radius:12px;padding:14px;text-align:center;color:#87A286;font-size:14px;font-weight:600;cursor:pointer;background:#fff}
@@ -2907,38 +2958,50 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "  const hid=document.getElementById('noites_hidden');\n"
         "  if(!a||!b){badge.textContent='—';hid.value='';return;}\n"
         "  const diff=Math.round((new Date(b+' 12:00')-new Date(a+' 12:00'))/(1000*60*60*24));\n"
-        "  if(diff>0){badge.textContent=diff+(diff===1?' noche':' noches');hid.value=diff;}\n"
-        "  else{badge.textContent='—';hid.value='';}\n"
+        "  if(diff>0){\n"
+        "    badge.textContent=diff+(diff===1?' noche':' noches');hid.value=diff;\n"
+        "    // Auto-llenar noches en las opciones si están vacías o tienen el valor anterior\n"
+        "    ['_0','_1'].forEach(sfx=>{\n"
+        "      const el=document.getElementById('nnoites'+sfx);\n"
+        "      if(el&&(!el.value||el.dataset.auto==='1')){el.value=diff;el.dataset.auto='1';calcNP(sfx);}\n"
+        "    });\n"
+        "  } else{badge.textContent='—';hid.value='';}\n"
         "}\n"
         "function showOpt2(){document.getElementById('opt2-block').style.display='block';this.style.display='none';}\n"
         "function hideOpt2(){document.getElementById('opt2-block').style.display='none';"
         "document.querySelector('.btn-add-opt').style.display='block';}\n"
-        "function calcNP(sfx,c){\n"
-        "  const nc=parseFloat(document.getElementById('pnoche'+sfx).value)||0;\n"
-        "  const nn=parseInt(document.getElementById('nnoites'+sfx).value)||1;\n"
-        "  const lp=parseFloat(document.getElementById('tlimpeza'+sfx).value)||0;\n"
-        "  const base=nc*nn;\n"
-        "  if(c==='pct'){\n"
-        "    const pct=parseFloat(document.getElementById('mpct'+sfx).value)||0;\n"
-        "    const gan=Math.round(base*pct/100);\n"
-        "    document.getElementById('ganancia'+sfx).value=gan;\n"
-        "    document.getElementById('psugerido'+sfx).value=Math.round(base+gan+lp);\n"
-        "  }else if(c==='sug'){\n"
-        "    const sug=parseFloat(document.getElementById('psugerido'+sfx).value)||0;\n"
-        "    const gan=Math.round(sug-base-lp);\n"
-        "    document.getElementById('ganancia'+sfx).value=gan;\n"
-        "    if(base>0)document.getElementById('mpct'+sfx).value=Math.round(gan/base*100);\n"
-        "  }else if(c==='gan'){\n"
-        "    const gan=parseFloat(document.getElementById('ganancia'+sfx).value)||0;\n"
-        "    document.getElementById('psugerido'+sfx).value=Math.round(base+gan+lp);\n"
-        "    if(base>0)document.getElementById('mpct'+sfx).value=Math.round(gan/base*100);\n"
-        "  }else{\n"
-        "    const pct=parseFloat(document.getElementById('mpct'+sfx).value)||25;\n"
-        "    const gan=Math.round(base*pct/100);\n"
-        "    document.getElementById('ganancia'+sfx).value=gan;\n"
-        "    document.getElementById('psugerido'+sfx).value=Math.round(base+gan+lp);\n"
+        "function calcNP(sfx){\n"
+        "  function fmt(v){return v>0?'R$ '+Math.round(v).toLocaleString('pt-BR'):'—';}\n"
+        "  const reg  = parseFloat(document.getElementById('pnoche'+sfx)?.value)||0;\n"
+        "  const desc = parseFloat(document.getElementById('pdesc'+sfx)?.value)||0;\n"
+        "  const nn   = parseInt(document.getElementById('nnoites'+sfx)?.value)||0;\n"
+        "  const lp   = parseFloat(document.getElementById('tlimpeza'+sfx)?.value)||0;\n"
+        "  const pct  = parseFloat(document.getElementById('mpct'+sfx)?.value)||0;\n"
+        "  // Badge descuento\n"
+        "  const badge=document.getElementById('pbadge'+sfx);\n"
+        "  if(badge){\n"
+        "    if(desc>0&&reg>0&&desc<reg){\n"
+        "      const d=Math.round((reg-desc)/reg*100);\n"
+        "      badge.textContent='-'+d+'%';badge.className='desc-badge';\n"
+        "    }else{badge.textContent='—';badge.className='desc-badge empty';}\n"
         "  }\n"
-        "  document.getElementById('ptotal'+sfx).value=Math.round(base+lp);\n"
+        "  // Diaria efectiva\n"
+        "  const diaria=(desc>0&&reg>0&&desc<reg)?desc:reg;\n"
+        "  // Subtotal\n"
+        "  const subtotal = nn>0&&diaria>0 ? diaria*nn+lp : 0;\n"
+        "  const el_sub=document.getElementById('psubtotal'+sfx);\n"
+        "  if(el_sub)el_sub.textContent=fmt(subtotal);\n"
+        "  // Ganancia y total\n"
+        "  const ganancia = subtotal>0&&pct>0 ? Math.round(subtotal*pct/100) : 0;\n"
+        "  const total    = subtotal + ganancia;\n"
+        "  const el_gan=document.getElementById('ganancia'+sfx);\n"
+        "  if(el_gan)el_gan.textContent=fmt(ganancia);\n"
+        "  const el_ganhid=document.getElementById('ganancia-hid'+sfx);\n"
+        "  if(el_ganhid)el_ganhid.value=ganancia||'';\n"
+        "  const el_td=document.getElementById('ptotal-disp'+sfx);\n"
+        "  if(el_td)el_td.textContent=fmt(total);\n"
+        "  const el_th=document.getElementById('ptotal'+sfx);\n"
+        "  if(el_th)el_th.value=total||'';\n"
         "}\n"
         "async function uploadFoto(sfx,input,fi){\n"
         "  const st=document.getElementById('fst'+sfx+'-'+fi);\n"
