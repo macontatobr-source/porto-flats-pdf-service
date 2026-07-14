@@ -3326,5 +3326,309 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
     return Response(html_np.encode("utf-8"), content_type="text/html; charset=utf-8")
 
 
+
+# ── RECIBO DE PAGO ─────────────────────────────────────────────────────────────
+import secrets as _sec_mod
+
+_RECEIPTS_FILE = "/app/receipts.json"
+
+def _load_receipts():
+    try:
+        with open(_RECEIPTS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def _save_receipts(data):
+    with open(_RECEIPTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def _next_recibo_num():
+    recs = _load_receipts()
+    nums = []
+    for v in recs.values():
+        try:
+            n = int(str(v.get("numero", "0")).replace("REC-", ""))
+            nums.append(n)
+        except Exception:
+            pass
+    nxt = (max(nums) + 1) if nums else 1
+    return "REC-" + str(nxt).zfill(3)
+
+@app.route("/nuevo-recibo", methods=["GET"])
+def nuevo_recibo_form():
+    from datetime import date as _date
+    numero = _next_recibo_num()
+    today = _date.today().strftime("%d/%m/%Y")
+    css = """
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh;padding-bottom:30px}
+.header{background:#87A286;padding:20px 16px;text-align:center}
+.logo{color:#fff;font-size:20px;font-weight:300;letter-spacing:5px;text-transform:uppercase}
+.logo-sub{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}
+.card{background:#fff;border-radius:14px;margin:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.07)}
+.sec-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;margin-bottom:14px;padding-bottom:6px;border-bottom:1px solid #EDE9E3}
+.field{margin-bottom:13px}
+label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#87A286;margin-bottom:5px}
+input,select,textarea{width:100%;padding:10px 12px;border:1px solid #CDC6C3;border-radius:8px;font-size:15px;color:#3D3D3D;background:#fff;outline:none;font-family:inherit}
+input:focus,select:focus{border-color:#87A286}
+.row{display:flex;gap:10px}
+.row .field{flex:1}
+.tipo-btns{display:flex;gap:8px;flex-wrap:wrap}
+.tipo-btn{flex:1;min-width:120px;padding:10px 8px;border:2px solid #CDC6C3;border-radius:10px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;text-align:center;transition:all .2s;color:#888}
+.tipo-btn.active{border-color:#87A286;color:#87A286;background:#f0f5f0}
+.btn{display:block;width:100%;padding:15px;background:#87A286;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;margin-top:6px}
+.btn:active{background:#6d8b6c}
+.msg{text-align:center;padding:10px;font-size:13px;margin-top:8px;border-radius:8px}
+.msg.err{background:#ffebee;color:#c62828}
+"""
+    html = (
+        "<!DOCTYPE html><html lang='es'><head>"
+        "<meta charset='UTF-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>"
+        "<title>Nuevo Recibo \xb7 Porto Flats</title>"
+        "<style>" + css + "</style></head><body>"
+        "<div class='header'><div class='logo'>Porto Flats</div>"
+        "<div class='logo-sub'>Recibo de Pago</div></div>"
+        "<form id='f' action='/nuevo-recibo' method='POST'>"
+
+        # Tipo
+        "<div class='card'>"
+        "<div class='sec-title'>Tipo de recibo</div>"
+        "<input type='hidden' name='tipo' id='tipo-val' value='reserva'>"
+        "<div class='tipo-btns'>"
+        "<button type='button' class='tipo-btn active' data-tipo='reserva' onclick='setTipo(this)'>✅ Reserva</button>"
+        "<button type='button' class='tipo-btn' data-tipo='parcial' onclick='setTipo(this)'>🟠 Pago Parcial</button>"
+        "<button type='button' class='tipo-btn' data-tipo='final' onclick='setTipo(this)'>🏁 Pago Final</button>"
+        "</div></div>"
+
+        # Cliente
+        "<div class='card'>"
+        "<div class='sec-title'>Cliente</div>"
+        "<div class='row'>"
+        "<div class='field'><label>Nombre</label><input name='nombre' required placeholder='Juan'></div>"
+        "<div class='field'><label>Apellido</label><input name='apellido' placeholder='García'></div>"
+        "</div>"
+        "<div class='field'><label>WhatsApp</label><input name='wa' placeholder='+54 9 11 1234-5678'></div>"
+        "<div class='field'><label>Email (opcional)</label><input name='email' type='email' placeholder='juan@email.com'></div>"
+        "</div>"
+
+        # Reserva
+        "<div class='card'>"
+        "<div class='sec-title'>Reserva</div>"
+        "<div class='field'><label>Apartamento</label><input name='apto' required placeholder='Nixxus Premium'></div>"
+        "<div class='row'>"
+        "<div class='field'><label>Check-in</label><input name='checkin' placeholder='20/07/2026'></div>"
+        "<div class='field'><label>Check-out</label><input name='checkout' placeholder='27/07/2026'></div>"
+        "</div>"
+        "<div class='row'>"
+        "<div class='field'><label>Noches</label><input name='noches' type='number' min='1' placeholder='7'></div>"
+        "<div class='field'><label>Personas</label><input name='personas' type='number' min='1' placeholder='2'></div>"
+        "</div>"
+        "</div>"
+
+        # Pago
+        "<div class='card'>"
+        "<div class='sec-title'>Pago</div>"
+        "<div class='row'>"
+        "<div class='field'><label>Monto abonado</label><input name='monto' required placeholder='1.200,00' id='monto'></div>"
+        "<div class='field'><label>Moneda</label>"
+        "<select name='moneda'><option value='BRL'>BRL R$</option><option value='USD'>USD U$S</option><option value='ARS'>ARS $</option></select>"
+        "</div></div>"
+        "<div class='field'><label>Forma de pago</label>"
+        "<select name='forma_pago'>"
+        "<option>PIX</option>"
+        "<option>Transferencia bancaria</option>"
+        "<option>Tarjeta de crédito</option>"
+        "<option>Efectivo</option>"
+        "<option>USDT</option>"
+        "</select></div>"
+        "<div class='field'><label>Fecha de pago</label><input name='fecha_pago' value='" + today + "' required></div>"
+        "<div class='field'><label>Referencia / ID transacción (opcional)</label><input name='ref' placeholder='PIX-12345'></div>"
+        "</div>"
+
+        # Resumen
+        "<div class='card'>"
+        "<div class='sec-title'>Resumen (opcional)</div>"
+        "<div class='row'>"
+        "<div class='field'><label>Valor total</label><input name='total' placeholder='2.400,00' id='total'></div>"
+        "<div class='field'><label>Saldo pendiente</label><input name='saldo' placeholder='1.200,00' id='saldo' readonly style='background:#f9f9f9'></div>"
+        "</div>"
+        "<div class='field'><label>Nota adicional (opcional)</label>"
+        "<textarea name='nota' rows='2' placeholder='Saldo a cancelar 10 días antes del check-in.'></textarea>"
+        "</div></div>"
+
+        # N° y submit
+        "<div class='card'>"
+        "<div class='sec-title'>Número de recibo</div>"
+        "<div class='field'><input name='numero' value='" + numero + "' required></div>"
+        "<button type='submit' class='btn' id='btn'>Generar Recibo</button>"
+        "<div class='msg' id='msg'></div>"
+        "</div>"
+
+        "</form>"
+        "<script>"
+        "function setTipo(el){"
+        "  document.querySelectorAll('.tipo-btn').forEach(b=>b.classList.remove('active'));"
+        "  el.classList.add('active');"
+        "  document.getElementById('tipo-val').value=el.dataset.tipo;"
+        "}"
+        "function calcSaldo(){"
+        "  var t=parseFloat((document.getElementById('total').value||'').replace(',','.').replace(/\\.(?=.*\\.)/g,''))||0;"
+        "  var m=parseFloat((document.getElementById('monto').value||'').replace(',','.').replace(/\\.(?=.*\\.)/g,''))||0;"
+        "  if(t>0&&m>0){document.getElementById('saldo').value=(t-m).toFixed(2).replace('.',',');}"
+        "}"
+        "document.getElementById('total').addEventListener('input',calcSaldo);"
+        "document.getElementById('monto').addEventListener('input',calcSaldo);"
+        "</script>"
+        "</body></html>"
+    )
+    return Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
+
+
+@app.route("/nuevo-recibo", methods=["POST"])
+def nuevo_recibo_post():
+    from datetime import datetime as _dt
+    fv = lambda k, d="": request.form.get(k, d).strip()
+
+    rid = _sec_mod.token_hex(5)  # 10 char hex
+    rec = {
+        "id": rid,
+        "created": _dt.utcnow().isoformat(),
+        "tipo": fv("tipo", "reserva"),
+        "numero": fv("numero"),
+        "nombre": fv("nombre"),
+        "apellido": fv("apellido"),
+        "wa": fv("wa"),
+        "email": fv("email"),
+        "apto": fv("apto"),
+        "checkin": fv("checkin"),
+        "checkout": fv("checkout"),
+        "noches": fv("noches"),
+        "personas": fv("personas"),
+        "monto": fv("monto"),
+        "moneda": fv("moneda", "BRL"),
+        "forma_pago": fv("forma_pago"),
+        "fecha_pago": fv("fecha_pago"),
+        "ref": fv("ref"),
+        "total": fv("total"),
+        "saldo": fv("saldo"),
+        "nota": fv("nota"),
+    }
+    recs = _load_receipts()
+    recs[rid] = rec
+    _save_receipts(recs)
+
+    base = os.environ.get("PROPUESTAS_DOMAIN", request.host_url.rstrip("/"))
+    return redirect(base + "/recibo/" + rid)
+
+
+
+@app.route("/recibo/<rid>", methods=["GET"])
+def ver_recibo(rid):
+    recs = _load_receipts()
+    rec = recs.get(rid)
+    if not rec:
+        return "Recibo no encontrado.", 404
+
+    tipo = rec.get("tipo", "reserva")
+    tipo_labels = {
+        "reserva": ("✅", "Reserva Confirmada"),
+        "parcial": ("\U0001f7e0", "Pago Parcial Recibido"),
+        "final": ("\U0001f3c1", "Pago Final Completado"),
+    }
+    tipo_ico, tipo_txt = tipo_labels.get(tipo, ("✅", "Recibo de Pago"))
+
+    nombre_full = (rec.get("nombre", "") + " " + rec.get("apellido", "")).strip()
+    moneda_sym = {"BRL": "R$", "USD": "U$S", "ARS": "$"}.get(rec.get("moneda", "BRL"), "R$")
+
+    def row(ico, label, val):
+        if not val:
+            return ""
+        return "<div class='pr-row'><span>" + ico + " " + label + "</span><span>" + str(val) + "</span></div>"
+
+    fin_rows = ""
+    if rec.get("monto"):
+        fin_rows += "<div class='pr-row pr-paid'><span>\U0001f4b3 Monto abonado</span><span>" + moneda_sym + " " + rec.get("monto") + "</span></div>"
+    if rec.get("total"):
+        fin_rows += "<div class='pr-row'><span>\U0001f4cb Valor total</span><span>" + moneda_sym + " " + rec.get("total") + "</span></div>"
+    if rec.get("saldo"):
+        try:
+            saldo_f = float(rec.get("saldo", "0").replace(",", "."))
+        except Exception:
+            saldo_f = -1
+        if saldo_f > 0:
+            fin_rows += "<div class='pr-row pr-saldo'><span>⏳ Saldo pendiente</span><span>" + moneda_sym + " " + rec.get("saldo") + "</span></div>"
+        elif saldo_f == 0:
+            fin_rows += "<div class='pr-row pr-ok'><span>✅ Saldo pendiente</span><span>Sin saldo — Pago completo</span></div>"
+
+    nota_html = ""
+    if rec.get("nota"):
+        nota_html = "<div class='card'><div class='sec-title'>Nota</div><div class='nota-box'>" + rec.get("nota") + "</div></div>"
+
+    css_r = (
+        "*{box-sizing:border-box;margin:0;padding:0}"
+        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh;padding-bottom:40px}"
+        ".header{background:#87A286;padding:20px 16px;text-align:center}"
+        ".logo{color:#fff;font-size:20px;font-weight:300;letter-spacing:5px;text-transform:uppercase}"
+        ".logo-sub{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}"
+        ".tipo-banner{background:#fff;text-align:center;padding:20px 16px 16px;border-bottom:1px solid #EDE9E3}"
+        ".tipo-ico{font-size:38px;line-height:1;margin-bottom:8px}"
+        ".tipo-txt{font-size:19px;font-weight:600;color:#3D3D3D}"
+        ".tipo-sub{font-size:14px;color:#87A286;margin-top:4px;font-weight:500}"
+        ".card{background:#fff;border-radius:14px;margin:14px;padding:22px;box-shadow:0 2px 14px rgba(0,0,0,.07)}"
+        ".sec-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;margin-bottom:12px}"
+        ".pr-table{background:#EDE9E3;border-radius:10px;padding:4px 14px;margin-top:4px}"
+        ".pr-row{display:flex;justify-content:space-between;padding:10px 0;font-size:14px;border-bottom:1px solid rgba(0,0,0,.06)}"
+        ".pr-row:last-child{border-bottom:none}"
+        ".pr-paid{font-weight:700;font-size:16px;color:#87A286}"
+        ".pr-saldo{color:#b07d2a;font-weight:600}"
+        ".pr-ok{color:#87A286;font-weight:600}"
+        ".num-badge{display:inline-block;background:#EDE9E3;border-radius:20px;padding:4px 14px;font-size:12px;color:#888;margin-top:8px}"
+        ".nota-box{background:#FFF8EE;border-left:3px solid #87A286;border-radius:0 8px 8px 0;padding:12px 14px;font-size:14px;color:#5a4a3a;margin-top:4px;line-height:1.5}"
+        ".footer{text-align:center;padding:24px 16px;color:#aaa;font-size:12px;line-height:1.7}"
+    )
+
+    parts = [
+        "<!DOCTYPE html><html lang='es'><head>",
+        "<meta charset='UTF-8'>",
+        "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>",
+        "<title>Recibo de Pago \xb7 Porto Flats</title>",
+        "<style>" + css_r + "</style></head><body>",
+        "<div class='header'><div class='logo'>Porto Flats</div>",
+        "<div class='logo-sub'>Porto de Galinhas \xb7 Pernambuco \xb7 Brasil</div></div>",
+        "<div class='tipo-banner'>",
+        "<div class='tipo-ico'>" + tipo_ico + "</div>",
+        "<div class='tipo-txt'>" + tipo_txt + "</div>",
+        ("<div class='tipo-sub'>" + nombre_full + "</div>") if nombre_full else "",
+        "<div class='num-badge'>" + rec.get("numero", rid) + "</div>",
+        "</div>",
+        "<div class='card'><div class='sec-title'>Cliente</div><div class='pr-table'>",
+        row("\U0001f464", "Nombre", nombre_full),
+        row("\U0001f4f1", "WhatsApp", rec.get("wa")),
+        row("✉️", "Email", rec.get("email")),
+        "</div></div>",
+        "<div class='card'><div class='sec-title'>Reserva</div><div class='pr-table'>",
+        row("\U0001f3e0", "Apartamento", rec.get("apto")),
+        row("\U0001f4c5", "Check-in", rec.get("checkin")),
+        row("\U0001f4c5", "Check-out", rec.get("checkout")),
+        row("\U0001f319", "Noches", rec.get("noches")),
+        row("\U0001f465", "Personas", rec.get("personas")),
+        "</div></div>",
+        "<div class='card'><div class='sec-title'>Detalle del pago</div><div class='pr-table'>",
+        fin_rows,
+        row("\U0001f4b3", "Forma de pago", rec.get("forma_pago")),
+        row("\U0001f4c6", "Fecha de pago", rec.get("fecha_pago")),
+        row("\U0001f511", "Referencia", rec.get("ref")),
+        "</div></div>",
+        nota_html,
+        "<div class='footer'>Porto Flats \xb7 Porto de Galinhas, PE, Brasil<br>",
+        "Este recibo es v\xe1lido como comprobante de pago.</div>",
+        "</body></html>",
+    ]
+    html_r = "".join(parts)
+    return Response(html_r.encode("utf-8"), content_type="text/html; charset=utf-8")
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), debug=False)
