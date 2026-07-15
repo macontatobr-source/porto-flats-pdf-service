@@ -287,12 +287,12 @@ def api_get_propuesta(prop_id):
 
 
 # ── /api/eliminar/<prop_id> ───────────────────────────────────────────────────
-@app.route("/api/eliminar/<prop_id>", methods=["DELETE"])
+@app.route("/api/eliminar/<prop_id>", methods=["DELETE", "POST"])
 def api_eliminar(prop_id):
     """Elimina una propuesta del historial."""
     store = _load_proposals()
     if prop_id not in store:
-        return jsonify({"error": "No encontrada o ya eliminada"}), 404
+        return jsonify({"ok": True})  # idempotente — ya no existe
     del store[prop_id]
     _save_proposals(store)
     return jsonify({"ok": True})
@@ -3119,7 +3119,7 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
         "  if(!confirm('\\u00bfEliminar esta propuesta del historial?'))return;\n"
         "  btn.disabled=true;btn.textContent='...';\n"
         "  try{\n"
-        "    const r=await fetch('/api/eliminar/'+id,{method:'DELETE'});\n"
+        "    const r=await fetch('/api/eliminar/'+id,{method:'POST'});\n"
         "    const j=await r.json();\n"
         "    if(j.ok){\n"
         "      openHistorial();\n"
@@ -3373,8 +3373,8 @@ input::placeholder,textarea::placeholder{color:#bbb}
 .row{display:flex;gap:10px}
 .row .field{flex:1}
 .tipo-btns{display:flex;gap:8px;flex-wrap:wrap}
-.tipo-btn{flex:1;min-width:100px;padding:10px 6px;border:2px solid #CDC6C3;border-radius:10px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;text-align:center;color:#aaa;transition:all .15s}
-.tipo-btn.active{border-color:#87A286;color:#87A286;background:#f0f5f0}
+.tipo-btn{flex:1;min-width:100px;padding:10px 6px;border:2px solid #CDC6C3;border-radius:10px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;text-align:center;color:#aaa;transition:all .2s;-webkit-tap-highlight-color:transparent}
+.tipo-btn.active{border-color:#87A286;color:#fff;background:#87A286}
 .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .toggle-label{font-size:13px;color:#3D3D3D;font-weight:500}
 .toggle{position:relative;width:44px;height:26px;flex-shrink:0}
