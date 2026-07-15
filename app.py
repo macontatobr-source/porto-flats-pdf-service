@@ -3595,6 +3595,7 @@ def nuevo_recibo_form():
         "<button type='button' class='tipo-btn' data-tipo='parcial' onclick='setTipo(this)'>&#x1F7E0; Pago Parcial</button>"
         "<button type='button' class='tipo-btn' data-tipo='final' onclick='setTipo(this)'>&#x1F3C1; Pago Final</button>"
         "</div></div>"
+        "<script>function setTipo(el){document.querySelectorAll('.tipo-btn').forEach(function(b){b.classList.remove('active');});el.classList.add('active');document.getElementById('tipo-val').value=el.dataset.tipo;}</script>"
 
         # N\xba y fecha
         "<div class='card'>"
