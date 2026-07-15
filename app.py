@@ -3410,6 +3410,9 @@ input:checked+.slider-tog:before{transform:translateX(18px)}
 .hbtn-view{background:#87A286;color:#fff}
 .hbtn-del{background:#fff;color:#c88;border:1px solid #e0c8c8}
 .modal-close{float:right;background:none;border:none;font-size:22px;cursor:pointer;color:#aaa;line-height:1}
+.btn-submit-blue{background:#4A90D9}
+.btn-submit-blue:active{background:#357abd}
+.btn-submit-mb{margin-bottom:10px}
 """
 
 _JS_RECIBO_FORM = """
@@ -3475,6 +3478,8 @@ async function openHistorial(){
       h+='<div class="hitem-meta">'+p.numero+' · '+p.fecha_pago+' · '+sym+' '+p.monto+'</div>';
       h+='<div class="hbtns">';
       h+='<button class="hbtn hbtn-view" onclick="location.href=\'/recibo/'+p.id+'\'">👁 Ver</button>';
+      h+='<button class="hbtn" style="background:#4A90D9;color:#fff" onclick="location.href=\'/nuevo-recibo?edit='+p.id+'\'">✏️ Editar</button>';
+      h+='<button class="hbtn" style="background:#25D366;color:#fff" id="reb-'+p.id+'" onclick="reenviarRecibo(\''+p.id+'\')">📤 Reenviar</button>';
       h+='<button class="hbtn hbtn-del" onclick="delRecibo(\''+p.id+'\')">✕ Eliminar</button>';
       h+='</div></div>';
     });
@@ -3491,13 +3496,39 @@ async function delRecibo(id){
   openHistorial();
 }
 if(new URLSearchParams(location.search).get('open')==='historial'){setTimeout(openHistorial,300);}
+async function reenviarRecibo(id){
+  if(!confirm('¿Reenviar recibo por WhatsApp al cliente?'))return;
+  var btn=document.getElementById('reb-'+id);
+  if(btn){btn.textContent='Enviando...';btn.disabled=true;}
+  try{
+    var r=await fetch('/recibo/'+id+'/enviar-wa',{method:'POST'});
+    var d=await r.json();
+    alert(d.ok?'✅ Enviado por WhatsApp':'❌ '+(d.error||'Error al enviar'));
+  }catch(e){alert('❌ Error de red');}
+  if(btn){btn.textContent='📤 Reenviar';btn.disabled=false;}
+}
+(function(){
+  var p=new URLSearchParams(location.search);
+  if(p.get('saved')==='1'){
+    var div=document.createElement('div');
+    div.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#87A286;color:#fff;padding:12px 28px;border-radius:20px;font-size:14px;font-weight:600;z-index:300;box-shadow:0 4px 12px rgba(0,0,0,.2)';
+    div.textContent='✅ Guardado en historial';
+    document.body.appendChild(div);
+    setTimeout(function(){div.remove();},3000);
+  }
+})();
 """
 
 
 @app.route("/nuevo-recibo", methods=["GET"])
 def nuevo_recibo_form():
     from datetime import date as _date
-    numero = _next_recibo_num()
+    import json as _json
+    edit_id = request.args.get("edit", "")
+    edata = {}
+    if edit_id:
+        edata = _load_receipts().get(edit_id, {})
+    numero = edata.get("numero") or _next_recibo_num()
     today = _date.today().strftime("%d/%m/%Y")
 
     POL_DEFAULT = (
@@ -3508,6 +3539,39 @@ def nuevo_recibo_form():
     ENERGIA_DEFAULT = "Incluye uso racional de energia (10 Kw/dia). Excedente: R$ 2/Kw."
     CONDO_DEFAULT = "Condominio: R$ 250/mes. Se acordo abonar el 50%. No incluido en este recibo."
     FOOTER_DEFAULT = "M&A Empreendimentos Ltda. / CNPJ: 51.057.038/0001-31"
+
+    edit_id_html = ("<input type='hidden' name='edit_id' value='" + edit_id + "'>") if edit_id else ""
+    _ed_json = _json.dumps(edata, ensure_ascii=False) if edata else ""
+    prefill_js_html = (
+        "<script>document.addEventListener('DOMContentLoaded',function(){"
+        "var ed=" + _ed_json + ";"
+        "if(!Object.keys(ed).length)return;"
+        "var f=document.getElementById('f');"
+        "function sv(n,v){var el=f.querySelector('[name=\"'+n+'\"]');if(el&&v!==undefined&&v!==null)el.value=v;}"
+        "sv('nombre',ed.nombre);sv('apellido',ed.apellido);sv('dni',ed.dni);sv('wa',ed.wa);sv('email',ed.email);"
+        "sv('apto',ed.apto);sv('apto_desc',ed.apto_desc);sv('checkin',ed.checkin);sv('checkout',ed.checkout);"
+        "sv('noches',ed.noches);sv('personas',ed.personas);"
+        "sv('monto',ed.monto);sv('ref',ed.ref);sv('total',ed.total);sv('saldo',ed.saldo);sv('nota',ed.nota);"
+        "sv('pol_texto',ed.pol_texto);sv('energia_texto',ed.energia_texto);sv('condo_texto',ed.condo_texto);"
+        "sv('footer_texto',ed.footer_texto);sv('fecha_pago',ed.fecha_pago);"
+        "if(ed.moneda){var ms=f.querySelector('[name=\"moneda\"]');if(ms)ms.value=ed.moneda;}"
+        "if(ed.forma_pago){var fps=f.querySelector('[name=\"forma_pago\"]');if(fps)fps.value=ed.forma_pago;}"
+        "if(ed.tipo){document.querySelectorAll('.tipo-btn').forEach(function(b){if(b.dataset.tipo===ed.tipo){setTipo(b);}});}"
+        "['pol','energia','condo'].forEach(function(k){"
+        "var show=ed['show_'+k]==='1';var cb=document.getElementById('tog-'+k);"
+        "if(cb&&show){cb.checked=true;tog(cb,'sec-'+k);}});"
+        "if(ed.servicios&&ed.servicios.length){"
+        "var c=document.getElementById('svc-container');var r0=document.getElementById('svc-row-0');"
+        "ed.servicios.forEach(function(s,i){"
+        "if(i===0&&r0){r0.querySelector('[name=\"svc_desc[]\"]').value=s.desc||'';"
+        "r0.querySelector('[name=\"svc_pesos[]\"]').value=s.pesos||'';"
+        "r0.querySelector('[name=\"svc_reales[]\"]').value=s.reales||'';}"
+        "else{addSvc();var rows=c.querySelectorAll('.svc-row');var last=rows[rows.length-1];"
+        "last.querySelector('[name=\"svc_desc[]\"]').value=s.desc||'';"
+        "last.querySelector('[name=\"svc_pesos[]\"]').value=s.pesos||'';"
+        "last.querySelector('[name=\"svc_reales[]\"]').value=s.reales||'';}});}"
+        "});</script>"
+    ) if edata else ""
 
     html = (
         "<!DOCTYPE html><html lang='es'><head>"
@@ -3522,9 +3586,10 @@ def nuevo_recibo_form():
         "</div></div>"
         "<form id='f' action='/nuevo-recibo' method='POST'>"
         "<input type='hidden' name='tipo' id='tipo-val' value='reserva'>"
+        + edit_id_html
 
         # Tipo
-        "<div class='card'>"
+        + "<div class='card'>"
         "<div class='sec-title'>Tipo de recibo</div>"
         "<div class='tipo-btns'>"
         "<button type='button' class='tipo-btn active' data-tipo='reserva' onclick='setTipo(this)'>&#x2705; Reserva</button>"
@@ -3651,10 +3716,12 @@ def nuevo_recibo_form():
         "</div>"
 
         "<div style='margin:0 14px'>"
-        "<button type='submit' class='btn-submit'>Generar Recibo</button>"
+        "<button type='submit' name='accion' value='guardar' class='btn-submit btn-submit-blue btn-submit-mb'>&#x1F4BE; Guardar en historial</button>"
+        "<button type='submit' name='accion' value='generar' class='btn-submit'>&#x1F4C4; Generar Recibo</button>"
         "</div>"
         "</form>"
-        "<div class='modal-overlay' id='hist-overlay' onclick='closeHistorial(event)'>"
+        + prefill_js_html
+        + "<div class='modal-overlay' id='hist-overlay' onclick='closeHistorial(event)'>"
         "<div class='modal-box' id='hist-box'>"
         "<button class='modal-close' onclick='closeHistorial()'>&#x2715;</button>"
         "<div class='modal-title'>&#x1F4CB; Historial de recibos</div>"
@@ -3686,7 +3753,9 @@ def nuevo_recibo_post():
                 "reales": reales[i].strip() if i < len(reales) else "",
             })
 
-    rid = _sec_mod.token_hex(5)
+    edit_id = fv("edit_id")
+    recs_pre = _load_receipts()
+    rid = edit_id if (edit_id and edit_id in recs_pre) else _sec_mod.token_hex(5)
     rec = {
         "id": rid,
         "created": _dt.utcnow().isoformat(),
@@ -3725,6 +3794,9 @@ def nuevo_recibo_post():
     _save_receipts(recs)
 
     base = os.environ.get("PROPUESTAS_DOMAIN", request.host_url.rstrip("/"))
+    accion = fv("accion", "generar")
+    if accion == "guardar":
+        return redirect(base + "/nuevo-recibo?saved=1")
     return redirect(base + "/recibo/" + rid)
 
 
@@ -3862,13 +3934,9 @@ def ver_recibo(rid):
         ".footer{text-align:center;padding:24px 16px;color:#aaa;font-size:11px;line-height:1.9}"
         ".action-bar{display:flex;gap:10px;margin:16px 14px 4px;flex-wrap:wrap}"
         ".btn-action{flex:1;min-width:130px;padding:14px 10px;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center}"
-        ".btn-wa{background:#25D366;color:#fff}"
-        ".btn-wa:active{background:#1da851}"
-        ".btn-wa:disabled{background:#aaa}"
-        ".btn-histlink{background:#fff;color:#87A286;border:2px solid #87A286}"
-        ".btn-histlink:active{background:#f0f5f0}"
-        ".toast-r{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#3D3D3D;color:#fff;padding:10px 22px;border-radius:20px;font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;z-index:200;pointer-events:none;white-space:nowrap}"
-        ".toast-r.show{opacity:1}"
+        ".btn-pdf{background:#4A90D9;color:#fff}"
+        ".btn-pdf:active{background:#357abd}"
+        "@media print{.action-bar{display:none}}"
     )
 
     # Cliente block
@@ -3931,29 +3999,10 @@ def ver_recibo(rid):
         pol_block,
         extra_block,
         "<div class='action-bar'>",
-        "<button class='btn-action btn-wa' id='btn-wa-send' onclick='sendWA()'>📤 Enviar al cliente</button>",
-        "<button class='btn-action btn-histlink' onclick=\"location.href='/nuevo-recibo?open=historial'\">📋 Ver historial</button>",
+        "<button class='btn-action btn-pdf' onclick='window.print()'>&#x2B07;&#xFE0F; Descargar PDF</button>",
         "</div>",
         "<div class='footer'><strong>" + footer_txt + "</strong><br>",
         "Documento interno v\xe1lido como comprobante de pago.</div>",
-        "<div class='toast-r' id='toast-r'></div>",
-        "<script>",
-        "function sendWA(){",
-        "  var btn=document.getElementById('btn-wa-send');",
-        "  btn.textContent='Enviando...';btn.disabled=true;",
-        "  fetch('/recibo/" + rid + "/enviar-wa',{method:'POST'})",
-        "    .then(function(r){return r.json();})",
-        "    .then(function(d){",
-        "      showToastR(d.ok?'✅ Enviado por WhatsApp':'❌ '+(d.error||'Error al enviar'));",
-        "      btn.textContent='📤 Enviar al cliente';btn.disabled=false;",
-        "    }).catch(function(){showToastR('❌ Error de red');btn.textContent='📤 Enviar al cliente';btn.disabled=false;});",
-        "}",
-        "function showToastR(msg){",
-        "  var t=document.getElementById('toast-r');",
-        "  t.textContent=msg;t.classList.add('show');",
-        "  setTimeout(function(){t.classList.remove('show');},3000);",
-        "}",
-        "</script>",
         "</body></html>",
     ]
     html_r = "".join(parts)
