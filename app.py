@@ -33,9 +33,10 @@ def _evo_headers():
 def _evo_send_text(numero, text):
     url = f"{EVO_URL}/message/sendText/{EVO_INST}"
     try:
-        http.post(url, json={"number": str(numero), "text": text},
-                  headers=_evo_headers(), timeout=30)
-        return True
+        r = http.post(url, json={"number": str(numero), "text": text},
+                      headers=_evo_headers(), timeout=30)
+        print(f"[EVO text] status={r.status_code} num={numero} body={r.text[:200]}")
+        return r.status_code < 300
     except Exception as e:
         print(f"[EVO text error] {e}")
         return False
@@ -2576,7 +2577,7 @@ def nuevo_presupuesto():
         personas  = request.form.get("personas", "")
         notas_int = request.form.get("notas_internas", "")
         pais      = request.form.get("pais", "BR")
-        wa_num    = request.form.get("whatsapp_num", "").strip().replace(" ","").replace("-","")
+        wa_num    = request.form.get("whatsapp_num", "").strip().replace(" ","").replace("-","").replace("+","")
         email_cl  = request.form.get("email_cliente", "").strip()
         # Calcular noches (type=date devuelve YYYY-MM-DD)
         noites = ""
@@ -3394,6 +3395,21 @@ input:checked+.slider-tog:before{transform:translateX(18px)}
 .btn-submit{display:block;width:100%;padding:15px;background:#87A286;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;margin-top:4px}
 .btn-submit:active{background:#6d8b6c}
 .opt-label{font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:4px;display:block}
+.btn-hist-trigger{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn-hist-trigger:active{background:rgba(255,255,255,.22)}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:none;align-items:flex-end}
+.modal-overlay.open{display:flex}
+.modal-box{background:#fff;border-radius:18px 18px 0 0;width:100%;max-height:75vh;overflow-y:auto;padding:20px 16px}
+.modal-title{font-size:15px;font-weight:700;color:#3D3D3D;margin-bottom:4px}
+.modal-sub{font-size:11px;color:#aaa;margin-bottom:14px}
+.hitem{border:1px solid #EDE9E3;border-radius:10px;padding:12px;margin-bottom:8px;background:#fafafa}
+.hitem-name{font-size:14px;font-weight:600;color:#3D3D3D}
+.hitem-meta{font-size:11px;color:#888;margin-top:3px}
+.hbtns{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.hbtn{padding:6px 12px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
+.hbtn-view{background:#87A286;color:#fff}
+.hbtn-del{background:#fff;color:#c88;border:1px solid #e0c8c8}
+.modal-close{float:right;background:none;border:none;font-size:22px;cursor:pointer;color:#aaa;line-height:1}
 """
 
 _JS_RECIBO_FORM = """
@@ -3437,6 +3453,46 @@ document.addEventListener('DOMContentLoaded',function(){
 });
 """
 
+_JS_RECIBO_HIST = """
+async function openHistorial(){
+  document.getElementById('hist-overlay').classList.add('open');
+  var listEl=document.getElementById('hist-list');
+  var subEl=document.getElementById('hist-sub');
+  listEl.innerHTML='<div style="text-align:center;padding:20px;color:#aaa">Cargando...</div>';
+  try{
+    var r=await fetch('/api/historial-recibos');
+    var items=await r.json();
+    subEl.textContent=items.length+' recibo'+(items.length!==1?'s':'')+' guardados';
+    if(!items.length){listEl.innerHTML='<div style="text-align:center;padding:20px;color:#aaa">Sin recibos guardados</div>';return;}
+    var h='';
+    var tipo_ico={reserva:'✅',parcial:'🟠',final:'🏁'};
+    var sym_map={BRL:'R$',USD:'U$S',ARS:'$'};
+    items.forEach(function(p){
+      var ico=tipo_ico[p.tipo]||'📋';
+      var sym=sym_map[p.moneda]||'R$';
+      h+='<div class="hitem">';
+      h+='<div class="hitem-name">'+ico+' '+(p.nombre||'Sin nombre')+'</div>';
+      h+='<div class="hitem-meta">'+p.numero+' · '+p.fecha_pago+' · '+sym+' '+p.monto+'</div>';
+      h+='<div class="hbtns">';
+      h+='<button class="hbtn hbtn-view" onclick="location.href=\'/recibo/'+p.id+'\'">👁 Ver</button>';
+      h+='<button class="hbtn hbtn-del" onclick="delRecibo(\''+p.id+'\')">✕ Eliminar</button>';
+      h+='</div></div>';
+    });
+    listEl.innerHTML=h;
+  }catch(e){listEl.innerHTML='<div style="color:#c88;padding:10px">Error al cargar historial</div>';}
+}
+function closeHistorial(e){
+  if(!e||e.target===document.getElementById('hist-overlay'))
+    document.getElementById('hist-overlay').classList.remove('open');
+}
+async function delRecibo(id){
+  if(!confirm('¿Eliminar este recibo del historial?'))return;
+  await fetch('/recibo/'+id+'/delete',{method:'POST'});
+  openHistorial();
+}
+if(new URLSearchParams(location.search).get('open')==='historial'){setTimeout(openHistorial,300);}
+"""
+
 
 @app.route("/nuevo-recibo", methods=["GET"])
 def nuevo_recibo_form():
@@ -3459,8 +3515,11 @@ def nuevo_recibo_form():
         "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>"
         "<title>Nuevo Recibo \xb7 Porto Flats</title>"
         "<style>" + _CSS_RECIBO_FORM + "</style></head><body>"
-        "<div class='header'><div class='logo'>Porto Flats</div>"
-        "<div class='logo-sub'>Nuevo Recibo de Pago</div></div>"
+        "<div class='header' style='position:relative'><div class='logo'>Porto Flats</div>"
+        "<div class='logo-sub'>Nuevo Recibo de Pago</div>"
+        "<div style='position:absolute;top:14px;right:14px'>"
+        "<button type='button' class='btn-hist-trigger' onclick='openHistorial()'>&#x1F4CB; Historial</button>"
+        "</div></div>"
         "<form id='f' action='/nuevo-recibo' method='POST'>"
         "<input type='hidden' name='tipo' id='tipo-val' value='reserva'>"
 
@@ -3595,7 +3654,14 @@ def nuevo_recibo_form():
         "<button type='submit' class='btn-submit'>Generar Recibo</button>"
         "</div>"
         "</form>"
-        "<script>" + _JS_RECIBO_FORM + "</script>"
+        "<div class='modal-overlay' id='hist-overlay' onclick='closeHistorial(event)'>"
+        "<div class='modal-box' id='hist-box'>"
+        "<button class='modal-close' onclick='closeHistorial()'>&#x2715;</button>"
+        "<div class='modal-title'>&#x1F4CB; Historial de recibos</div>"
+        "<div class='modal-sub' id='hist-sub'></div>"
+        "<div id='hist-list'></div>"
+        "</div></div>"
+        "<script>" + _JS_RECIBO_FORM + _JS_RECIBO_HIST + "</script>"
         "</body></html>"
     )
     return Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
@@ -3794,6 +3860,15 @@ def ver_recibo(rid):
         ".pol-item:last-child{border-bottom:none}"
         ".nota-box{background:#F5F5F0;border-left:3px solid #87A286;border-radius:0 8px 8px 0;padding:10px 12px;font-size:13px;color:#5a4a3a;line-height:1.6}"
         ".footer{text-align:center;padding:24px 16px;color:#aaa;font-size:11px;line-height:1.9}"
+        ".action-bar{display:flex;gap:10px;margin:16px 14px 4px;flex-wrap:wrap}"
+        ".btn-action{flex:1;min-width:130px;padding:14px 10px;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center}"
+        ".btn-wa{background:#25D366;color:#fff}"
+        ".btn-wa:active{background:#1da851}"
+        ".btn-wa:disabled{background:#aaa}"
+        ".btn-histlink{background:#fff;color:#87A286;border:2px solid #87A286}"
+        ".btn-histlink:active{background:#f0f5f0}"
+        ".toast-r{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#3D3D3D;color:#fff;padding:10px 22px;border-radius:20px;font-size:13px;font-weight:600;opacity:0;transition:opacity .3s;z-index:200;pointer-events:none;white-space:nowrap}"
+        ".toast-r.show{opacity:1}"
     )
 
     # Cliente block
@@ -3855,12 +3930,98 @@ def ver_recibo(rid):
         nota_block,
         pol_block,
         extra_block,
+        "<div class='action-bar'>",
+        "<button class='btn-action btn-wa' id='btn-wa-send' onclick='sendWA()'>📤 Enviar al cliente</button>",
+        "<button class='btn-action btn-histlink' onclick=\"location.href='/nuevo-recibo?open=historial'\">📋 Ver historial</button>",
+        "</div>",
         "<div class='footer'><strong>" + footer_txt + "</strong><br>",
         "Documento interno v\xe1lido como comprobante de pago.</div>",
+        "<div class='toast-r' id='toast-r'></div>",
+        "<script>",
+        "function sendWA(){",
+        "  var btn=document.getElementById('btn-wa-send');",
+        "  btn.textContent='Enviando...';btn.disabled=true;",
+        "  fetch('/recibo/" + rid + "/enviar-wa',{method:'POST'})",
+        "    .then(function(r){return r.json();})",
+        "    .then(function(d){",
+        "      showToastR(d.ok?'✅ Enviado por WhatsApp':'❌ '+(d.error||'Error al enviar'));",
+        "      btn.textContent='📤 Enviar al cliente';btn.disabled=false;",
+        "    }).catch(function(){showToastR('❌ Error de red');btn.textContent='📤 Enviar al cliente';btn.disabled=false;});",
+        "}",
+        "function showToastR(msg){",
+        "  var t=document.getElementById('toast-r');",
+        "  t.textContent=msg;t.classList.add('show');",
+        "  setTimeout(function(){t.classList.remove('show');},3000);",
+        "}",
+        "</script>",
         "</body></html>",
     ]
     html_r = "".join(parts)
     return Response(html_r.encode("utf-8"), content_type="text/html; charset=utf-8")
+
+
+@app.route("/api/historial-recibos", methods=["GET"])
+def api_historial_recibos():
+    from datetime import datetime as _dt2, timedelta as _td2
+    recs = _load_receipts()
+    setts = _load_settings()
+    dias = setts.get("dias_historial", 45)
+    cutoff = _dt2.utcnow() - _td2(days=dias)
+    out = []
+    for rid2, r in recs.items():
+        try:
+            created = _dt2.fromisoformat(r.get("created", ""))
+        except Exception:
+            created = _dt2.utcnow()
+        if created < cutoff:
+            continue
+        nombre_full = (r.get("nombre", "") + " " + r.get("apellido", "")).strip()
+        out.append({
+            "id": rid2,
+            "numero": r.get("numero", ""),
+            "nombre": nombre_full,
+            "tipo": r.get("tipo", "reserva"),
+            "fecha_pago": r.get("fecha_pago", ""),
+            "monto": r.get("monto", ""),
+            "moneda": r.get("moneda", "BRL"),
+            "created": r.get("created", ""),
+            "wa": r.get("wa", ""),
+        })
+    out.sort(key=lambda x: x["created"], reverse=True)
+    return jsonify(out)
+
+
+@app.route("/recibo/<rid>/enviar-wa", methods=["POST"])
+def enviar_recibo_wa(rid):
+    recs = _load_receipts()
+    rec = recs.get(rid)
+    if not rec:
+        return jsonify({"ok": False, "error": "Recibo no encontrado"}), 404
+    wa = rec.get("wa", "").strip().replace(" ", "").replace("-", "").replace("+", "")
+    if not wa:
+        return jsonify({"ok": False, "error": "Sin número de WhatsApp guardado en el recibo"}), 400
+    nombre = (rec.get("nombre", "") + " " + rec.get("apellido", "")).strip() or "cliente"
+    base = os.environ.get("PROPUESTAS_DOMAIN", request.host_url.rstrip("/"))
+    link = base + "/recibo/" + rid
+    sym = {"BRL": "R$", "USD": "U$S", "ARS": "$"}.get(rec.get("moneda", "BRL"), "R$")
+    msg = (
+        f"¡Hola {nombre}! 👋\n\n"
+        f"Te enviamos tu recibo de pago {rec.get('numero', '')} de Porto Flats.\n\n"
+        f"💰 Monto abonado: {sym} {rec.get('monto', '')}\n"
+        f"📋 Ver comprobante:\n{link}\n\n"
+        f"¡Muchas gracias! 🏠"
+    )
+    ok = _evo_send_text(wa, msg)
+    return jsonify({"ok": ok})
+
+
+@app.route("/recibo/<rid>/delete", methods=["POST"])
+def delete_recibo(rid):
+    recs = _load_receipts()
+    if rid in recs:
+        del recs[rid]
+        _save_receipts(recs)
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
