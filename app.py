@@ -3609,10 +3609,10 @@ async function openHistorial(){
       h+='<div class="hitem-name">'+ico+' '+(p.nombre||'Sin nombre')+'</div>';
       h+='<div class="hitem-meta">'+p.numero+' · '+p.fecha_pago+' · '+sym+' '+p.monto+'</div>';
       h+='<div class="hbtns">';
-      h+='<button class="hbtn hbtn-view" onclick="location.href=\'/recibo/'+p.id+'\'">👁 Ver</button>';
-      h+='<button class="hbtn" style="background:#4A90D9;color:#fff" onclick="location.href=\'/nuevo-recibo?edit='+p.id+'\'">✏️ Editar</button>';
-      h+='<button class="hbtn" style="background:#25D366;color:#fff" id="reb-'+p.id+'" onclick="reenviarRecibo(\''+p.id+'\')">📤 Reenviar</button>';
-      h+='<button class="hbtn hbtn-del" onclick="delRecibo(\''+p.id+'\')">✕ Eliminar</button>';
+      h+='<button class="hbtn hbtn-view" onclick="location.href=\\'/recibo/'+p.id+'\\'">👁 Ver</button>';
+      h+='<button class="hbtn" style="background:#4A90D9;color:#fff" onclick="location.href=\\'/nuevo-recibo?edit='+p.id+'\\'">✏️ Editar</button>';
+      h+='<button class="hbtn" style="background:#25D366;color:#fff" id="reb-'+p.id+'" onclick="reenviarRecibo(\\''+p.id+'\\')">📤 Reenviar</button>';
+      h+='<button class="hbtn hbtn-del" onclick="delRecibo(\\''+p.id+'\\')">✕ Eliminar</button>';
       h+='</div></div>';
     });
     listEl.innerHTML=h;
