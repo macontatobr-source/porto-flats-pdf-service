@@ -294,7 +294,7 @@ def api_eliminar(prop_id):
     if prop_id not in store:
         return jsonify({"ok": True})  # idempotente — ya no existe
     del store[prop_id]
-    _save_proposals(store)
+    _save_proposals_store(store)
     return jsonify({"ok": True})
 
 
@@ -3357,103 +3357,226 @@ def _next_recibo_num():
     return "REC-" + str(nxt).zfill(3)
 
 
-_CSS_RECIBO_FORM = """
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh;padding-bottom:40px}
-.header{background:#87A286;padding:20px 16px;text-align:center}
-.logo{color:#fff;font-size:20px;font-weight:300;letter-spacing:5px;text-transform:uppercase}
-.logo-sub{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}
-.card{background:#fff;border-radius:14px;margin:12px 14px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
-.sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;margin-bottom:14px;padding-bottom:7px;border-bottom:1px solid #EDE9E3}
-.field{margin-bottom:12px}
-label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#87A286;margin-bottom:5px}
-input,select,textarea{width:100%;padding:10px 12px;border:1px solid #CDC6C3;border-radius:8px;font-size:14px;color:#3D3D3D;background:#fff;outline:none;font-family:inherit}
-input:focus,select:focus,textarea:focus{border-color:#87A286}
-input::placeholder,textarea::placeholder{color:#bbb}
-.row{display:flex;gap:10px}
-.row .field{flex:1}
-.tipo-btns{display:flex;gap:8px;flex-wrap:wrap}
-.tipo-btn{flex:1;min-width:100px;padding:10px 6px;border:2px solid #CDC6C3;border-radius:10px;background:#fff;font-size:13px;font-weight:600;cursor:pointer;text-align:center;color:#aaa;transition:all .2s;-webkit-tap-highlight-color:transparent}
-.tipo-btn.active{border-color:#87A286;color:#fff;background:#87A286}
-.toggle-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-.toggle-label{font-size:13px;color:#3D3D3D;font-weight:500}
-.toggle{position:relative;width:44px;height:26px;flex-shrink:0}
-.toggle input{opacity:0;width:0;height:0}
-.slider-tog{position:absolute;inset:0;background:#CDC6C3;border-radius:26px;cursor:pointer;transition:.2s}
-.slider-tog:before{content:'';position:absolute;width:20px;height:20px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
-input:checked+.slider-tog{background:#87A286}
-input:checked+.slider-tog:before{transform:translateX(18px)}
-.sec-collapsible{display:none;margin-top:10px}
-.sec-collapsible.open{display:block}
-.svc-row{display:grid;grid-template-columns:2fr 1fr 1fr 36px;gap:6px;align-items:center;margin-bottom:8px}
-.svc-row input{padding:8px 10px;font-size:13px}
-.svc-head{display:grid;grid-template-columns:2fr 1fr 1fr 36px;gap:6px;margin-bottom:4px}
-.svc-head span{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#aaa}
-.del-btn{width:32px;height:32px;border:1px solid #e0c8c8;border-radius:8px;background:#fff;color:#c88;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}
-.add-btn{display:flex;align-items:center;gap:6px;padding:8px 14px;border:1px dashed #CDC6C3;border-radius:8px;background:transparent;color:#87A286;font-size:13px;font-weight:600;cursor:pointer;margin-top:4px;width:100%;justify-content:center}
-.btn-submit{display:block;width:100%;padding:15px;background:#87A286;color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;margin-top:4px}
-.btn-submit:active{background:#6d8b6c}
-.opt-label{font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:1px;font-weight:600;margin-bottom:4px;display:block}
-.btn-hist-trigger{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
-.btn-hist-trigger:active{background:rgba(255,255,255,.22)}
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;display:none;align-items:flex-end}
-.modal-overlay.open{display:flex}
-.modal-box{background:#fff;border-radius:18px 18px 0 0;width:100%;max-height:75vh;overflow-y:auto;padding:20px 16px}
-.modal-title{font-size:15px;font-weight:700;color:#3D3D3D;margin-bottom:4px}
-.modal-sub{font-size:11px;color:#aaa;margin-bottom:14px}
-.hitem{border:1px solid #EDE9E3;border-radius:10px;padding:12px;margin-bottom:8px;background:#fafafa}
-.hitem-name{font-size:14px;font-weight:600;color:#3D3D3D}
-.hitem-meta{font-size:11px;color:#888;margin-top:3px}
-.hbtns{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-.hbtn{padding:6px 12px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}
-.hbtn-view{background:#87A286;color:#fff}
-.hbtn-del{background:#fff;color:#c88;border:1px solid #e0c8c8}
-.modal-close{float:right;background:none;border:none;font-size:22px;cursor:pointer;color:#aaa;line-height:1}
-.btn-submit-blue{background:#4A90D9}
-.btn-submit-blue:active{background:#357abd}
-.btn-submit-mb{margin-bottom:10px}
-"""
+_CSS_RECIBO_FORM = (
+    "*{box-sizing:border-box;margin:0;padding:0}"
+    "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;"
+    "background:#EDE9E3;color:#3D3D3D;min-height:100vh;padding-bottom:90px}"
+    ".header{background:#87A286;padding:14px 16px;text-align:center}"
+    ".logo{color:#fff;font-size:18px;font-weight:300;letter-spacing:5px;text-transform:uppercase}"
+    ".logo-sub{color:rgba(255,255,255,.7);font-size:10px;letter-spacing:2px;margin-top:2px}"
+    ".nav{background:#3D3D3D;padding:9px 12px;display:flex;align-items:center;gap:6px}"
+    ".nav-title{color:rgba(255,255,255,.45);font-size:11px;flex:1;font-weight:500}"
+    ".nbtn{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;"
+    "padding:6px 12px;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}"
+    ".nbtn:active{background:rgba(255,255,255,.22)}"
+    ".card{background:#fff;border-radius:14px;margin:10px 12px;padding:16px;border:1px solid #E8E4DE}"
+    ".st{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;"
+    "margin-bottom:12px;padding-bottom:6px;border-bottom:1.5px solid #F0EDE8}"
+    ".fi{margin-bottom:11px}.fi:last-child{margin-bottom:0}"
+    "label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.9px;"
+    "color:#87A286;margin-bottom:4px}"
+    "input,select,textarea{width:100%;padding:10px 12px;border:1.5px solid #D4CEC9;border-radius:9px;"
+    "font-size:13px;color:#3D3D3D;background:#fff;outline:none;font-family:inherit;"
+    "-webkit-appearance:none;appearance:none}"
+    "input:focus,select:focus,textarea:focus{border-color:#87A286;box-shadow:0 0 0 3px rgba(135,162,134,.12)}"
+    "input[readonly]{background:#F6F4F1;color:#999;border-color:#E0DDD9}"
+    "input::placeholder,textarea::placeholder{color:#C4BDB8}"
+    "input[type=date]{color:#3D3D3D}"
+    ".r2{display:grid;grid-template-columns:1fr 1fr;gap:10px}"
+    ".togrow{display:flex;align-items:center;justify-content:space-between}"
+    ".toglbl{font-size:13px;color:#3D3D3D;font-weight:500}"
+    ".toggle{position:relative;width:44px;height:26px;flex-shrink:0}"
+    ".toggle input{opacity:0;width:0;height:0}"
+    ".slider-tog{position:absolute;inset:0;background:#D4CEC9;border-radius:26px;cursor:pointer;transition:.2s}"
+    ".slider-tog:before{content:'';position:absolute;width:20px;height:20px;left:3px;bottom:3px;"
+    "background:#fff;border-radius:50%;transition:.2s}"
+    "input:checked+.slider-tog{background:#87A286}"
+    "input:checked+.slider-tog:before{transform:translateX(18px)}"
+    ".sec-coll{display:none;margin-top:11px}.sec-coll.open{display:block}"
+    ".svc-head{display:grid;grid-template-columns:2fr 1fr 1fr 32px;gap:6px;margin-bottom:4px}"
+    ".svc-head span{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#B0A9A4;padding:0 2px}"
+    ".svc-row{display:grid;grid-template-columns:2fr 1fr 1fr 32px;gap:6px;align-items:center;margin-bottom:7px}"
+    ".svc-row input{padding:8px 9px;font-size:12px}"
+    ".del-btn{width:30px;height:30px;border:1.5px solid #E8D0D0;border-radius:7px;background:#fff;"
+    "color:#c88;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1}"
+    ".add-btn{display:flex;align-items:center;gap:6px;padding:9px 14px;border:1.5px dashed #D4CEC9;"
+    "border-radius:9px;background:transparent;color:#87A286;font-size:12px;font-weight:700;cursor:pointer;"
+    "margin-top:6px;width:100%;justify-content:center;font-family:inherit}"
+    ".add-btn:active{border-color:#87A286;background:#F8FBF8}"
+    ".actbar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1.5px solid #EDEBE7;"
+    "padding:10px 12px;display:flex;gap:8px;z-index:50}"
+    ".btn-save{flex:1;padding:13px;background:#4A90D9;color:#fff;border:none;border-radius:12px;"
+    "font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}"
+    ".btn-save:active{background:#3680C9}"
+    ".btn-wa{flex:1;padding:13px;background:#25D366;color:#fff;border:none;border-radius:12px;"
+    "font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}"
+    ".btn-wa:active{background:#1DB954}"
+    ".modal-overlay{position:fixed;inset:0;background:rgba(40,35,30,.55);z-index:100;display:none;"
+    "align-items:flex-end;justify-content:center}"
+    ".modal-overlay.open{display:flex}"
+    ".modal-box{background:#EDE9E3;border-radius:20px 20px 0 0;width:100%;max-height:82vh;overflow-y:auto}"
+    ".modal-head{background:#87A286;padding:14px 16px;border-radius:20px 20px 0 0;"
+    "display:flex;justify-content:space-between;align-items:center}"
+    ".modal-head h3{color:#fff;font-size:15px;font-weight:600;margin:0}"
+    ".modal-close{background:rgba(255,255,255,.2);border:none;color:#fff;width:28px;height:28px;"
+    "border-radius:50%;font-size:16px;cursor:pointer;font-family:inherit;padding:0;line-height:1}"
+    ".mbody{padding:12px}"
+    ".mcard{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid #E8E4DE}"
+    ".msec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#87A286;margin-bottom:10px}"
+    ".mfi{margin-bottom:9px}.mfi:last-child{margin-bottom:0}"
+    ".mfi label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#87A286;margin-bottom:4px}"
+    ".mfi input,.mfi select,.mfi textarea{width:100%;padding:9px 11px;border:1.5px solid #D4CEC9;"
+    "border-radius:8px;font-size:13px;color:#3D3D3D;background:#fff;outline:none;font-family:inherit;"
+    "-webkit-appearance:none;appearance:none}"
+    ".mfi input:focus,.mfi select:focus,.mfi textarea:focus{border-color:#87A286}"
+    ".mr2{display:grid;grid-template-columns:1fr 1fr;gap:8px}"
+    ".msave-btn{width:100%;padding:12px;background:#87A286;color:#fff;border:none;border-radius:10px;"
+    "font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:8px}"
+    ".hitem{background:#fff;border-radius:12px;padding:13px;margin-bottom:8px;border:1px solid #E8E4DE}"
+    ".hitem-name{font-size:13px;font-weight:700;color:#3D3D3D}"
+    ".hitem-meta{font-size:11px;color:#999;margin-top:2px}"
+    ".hbtns{display:flex;gap:5px;margin-top:8px;flex-wrap:wrap}"
+    ".hbtn{padding:5px 10px;border-radius:7px;border:none;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}"
+    ".hbtn-view{background:#87A286;color:#fff}"
+    ".hbtn-del{background:#fff;color:#c08080;border:1px solid #E8D0D0}"
+    ".prev-wrap{background:#fff;border-radius:14px;margin:10px 12px;overflow:hidden;border:1px solid #E8E4DE}"
+    ".prev-lbl{background:#F6F4F1;padding:10px 16px;font-size:10px;font-weight:700;text-transform:uppercase;"
+    "letter-spacing:1.5px;color:#87A286;border-bottom:1px solid #EDEBE7}"
+    ".p-hdr{background:#87A286;padding:16px;text-align:center}"
+    ".p-logo{color:#fff;font-size:14px;font-weight:300;letter-spacing:4px;text-transform:uppercase}"
+    ".p-tipo{color:rgba(255,255,255,.75);font-size:9px;letter-spacing:1.5px;margin-top:3px;text-transform:uppercase}"
+    ".p-num{color:rgba(255,255,255,.9);font-size:11px;font-weight:600;margin-top:5px}"
+    ".p-body{padding:14px}"
+    ".p-sec{margin-bottom:12px}"
+    ".p-sect{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;"
+    "border-bottom:1px solid #F0EDE8;padding-bottom:3px;margin-bottom:7px}"
+    ".p-row{display:flex;justify-content:space-between;font-size:11px;color:#999;margin-bottom:3px;gap:6px}"
+    ".p-row strong{color:#3D3D3D;font-weight:600;text-align:right}"
+    ".p-box{background:#F6F4F1;border-radius:8px;padding:12px;margin-top:4px}"
+    ".p-boxr{display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:#3D3D3D}"
+    ".p-saldo{font-size:11px;color:#87A286;text-align:right;margin-top:4px}"
+    ".p-nota{font-size:11px;color:#888;font-style:italic;margin-top:10px;padding:9px 11px;"
+    "background:#FAFAF8;border-radius:7px;border-left:3px solid #E8E4DE}"
+    ".p-cond{font-size:11px;color:#666;margin-top:9px;padding:9px 11px;background:#F8FBF8;"
+    "border-radius:7px;border-left:3px solid rgba(135,162,134,.4)}"
+    ".p-cond-t{display:block;font-size:9px;text-transform:uppercase;letter-spacing:1px;"
+    "color:#87A286;margin-bottom:3px;font-weight:700}"
+    ".p-foot{background:#F2F0ED;padding:8px 14px;font-size:10px;color:#B0A9A4;text-align:center}"
+    ".p-dlwrap{text-align:center;padding:12px;border-top:1px solid #F0EDE8}"
+    ".p-dlbtn{display:inline-block;background:#87A286;color:#fff;border:none;padding:9px 26px;"
+    "border-radius:18px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit}"
+    ".toast{display:none;position:fixed;top:20px;left:50%;transform:translateX(-50%);"
+    "background:#3D3D3D;color:#fff;padding:10px 22px;border-radius:20px;font-size:13px;"
+    "font-weight:600;z-index:999;white-space:nowrap}"
+)
 
-_JS_RECIBO_FORM = """
-var svcCount=0;
-function setTipo(el){
-  document.querySelectorAll('.tipo-btn').forEach(b=>b.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('tipo-val').value=el.dataset.tipo;
-}
-function tog(cb,secId){
-  var sec=document.getElementById(secId);
-  if(sec) sec.classList.toggle('open', cb.checked);
-}
-function addSvc(){
-  svcCount++;
-  var c=document.getElementById('svc-container');
-  var d=document.createElement('div');
-  d.className='svc-row';
-  d.id='svc-row-'+svcCount;
-  d.innerHTML='<input name="svc_desc[]" placeholder="Concepto">'
-    +'<input name="svc_pesos[]" placeholder="$ 0">'
-    +'<input name="svc_reales[]" placeholder="R$ 0">'
-    +'<button type="button" class="del-btn" onclick="delSvc('+svcCount+')">×</button>';
-  c.appendChild(d);
-}
-function delSvc(i){
-  var el=document.getElementById('svc-row-'+i);
-  if(el) el.remove();
-}
-function calcSaldo(){
-  var t=parseFloat((document.getElementById('f-total').value||'').replace(/[^0-9.,]/g,'').replace(',','.'))||0;
-  var m=parseFloat((document.getElementById('f-monto').value||'').replace(/[^0-9.,]/g,'').replace(',','.'))||0;
-  if(t>0&&m>0){
-    var s=(t-m);
-    document.getElementById('f-saldo').value=s>0?s.toFixed(2).replace('.',','):'0,00';
-  }
-}
-document.addEventListener('DOMContentLoaded',function(){
-  document.getElementById('f-total').addEventListener('input',calcSaldo);
-  document.getElementById('f-monto').addEventListener('input',calcSaldo);
-});
-"""
+_JS_RECIBO_FORM = (
+    "var svcCount=0;\n"
+    "function tog(cb,secId){"
+    "var sec=document.getElementById(secId);"
+    "if(sec)sec.classList.toggle('open',cb.checked);updatePreview();}\n"
+    "function addSvc(){\n"
+    "svcCount++;\n"
+    "var c=document.getElementById('svc-container');\n"
+    "var d=document.createElement('div');\n"
+    "d.className='svc-row';d.id='svc-row-'+svcCount;\n"
+    "d.innerHTML='<input name=\"svc_desc[]\" placeholder=\"Concepto\" oninput=\"updatePreview()\">'"
+    "+'<input name=\"svc_pesos[]\" placeholder=\"$ 0\" onblur=\"fmtField(this)\" oninput=\"updatePreview()\">'"
+    "+'<input name=\"svc_reales[]\" placeholder=\"R$ 0\" onblur=\"fmtField(this)\" oninput=\"updatePreview()\">'"
+    "+'<button type=\"button\" class=\"del-btn\" onclick=\"delSvc('+svcCount+')\">&#xd7;</button>';\n"
+    "c.appendChild(d);\n"
+    "}\n"
+    "function delSvc(i){var el=document.getElementById('svc-row-'+i);if(el){el.remove();updatePreview();}}\n"
+    "function pN(v){return parseFloat((v||'').replace(/\\./g,'').replace(',','.'))||0;}\n"
+    "function fmtN(n){return n.toFixed(2).replace('.',',').replace(/\\B(?=(\\d{3})+(?!\\d))/g,'.');}\n"
+    "function fmtField(el){var n=pN(el.value);if(n>0)el.value=fmtN(n);}\n"
+    "function calcNights(){\n"
+    "var ci=document.getElementById('f-ci').value;\n"
+    "var co=document.getElementById('f-co').value;\n"
+    "if(ci&&co){var d=Math.round((new Date(co)-new Date(ci))/86400000);\n"
+    "document.getElementById('f-noches').value=d>0?d:'';}\n"
+    "updatePreview();}\n"
+    "function calcSaldo(){\n"
+    "var tipo=document.getElementById('tipo-val').value;\n"
+    "var t=pN(document.getElementById('f-total').value);\n"
+    "var m=pN(document.getElementById('f-monto').value);\n"
+    "var el=document.getElementById('f-saldo');\n"
+    "if(tipo==='final'){el.value='0,00';}\n"
+    "else if(t>0&&m>0){el.value=fmtN(Math.max(0,t-m));}\n"
+    "updatePreview();}\n"
+    "function onTipoChange(){calcSaldo();updatePreview();}\n"
+    "function fd(s){if(!s)return '';var p=s.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:s;}\n"
+    "var _symMap={BRL:'R$',USD:'U$S',ARS:'$'};\n"
+    "var _tipoLbl={reserva:'RECIBO DE RESERVA',parcial:'RECIBO DE PAGO PARCIAL',final:'RECIBO DE PAGO FINAL'};\n"
+    "function _sv(id,v){var el=document.getElementById(id);if(el)el.textContent=v||'';}\n"
+    "function _sd(id,show){var el=document.getElementById(id);if(el)el.style.display=show?'flex':'none';}\n"
+    "function _sb(id,show){var el=document.getElementById(id);if(el)el.style.display=show?'block':'none';}\n"
+    "function updatePreview(){\n"
+    "var tipo=document.getElementById('tipo-val').value;\n"
+    "var nom=((document.getElementById('f-nom').value||'')+' '+(document.getElementById('f-ape').value||'')).trim();\n"
+    "var wa=(document.getElementById('f-wa')&&document.getElementById('f-wa').value)||'';\n"
+    "var apto=(document.getElementById('f-apto')&&document.getElementById('f-apto').value)||'';\n"
+    "var ci=document.getElementById('f-ci').value||'';\n"
+    "var co=document.getElementById('f-co').value||'';\n"
+    "var noch=document.getElementById('f-noches').value||'';\n"
+    "var monto=document.getElementById('f-monto').value||'';\n"
+    "var saldo=document.getElementById('f-saldo').value||'';\n"
+    "var nota=(document.getElementById('f-nota')&&document.getElementById('f-nota').value)||'';\n"
+    "var moneda=(document.getElementById('f-moneda')&&document.getElementById('f-moneda').value)||'BRL';\n"
+    "var num=(document.getElementById('f-num')&&document.getElementById('f-num').value)||'REC-001';\n"
+    "var fecha=(document.getElementById('f-fecha')&&document.getElementById('f-fecha').value)||'';\n"
+    "var footer=(document.getElementById('f-footer')&&document.getElementById('f-footer').value)||'';\n"
+    "var sym=_symMap[moneda]||'R$';\n"
+    "_sv('p-tipo',_tipoLbl[tipo]||'RECIBO DE PAGO');\n"
+    "_sv('p-num',num+(fecha?' \xb7 '+fd(fecha):''));\n"
+    "_sv('p-nom',nom||'—');\n"
+    "_sd('p-wa-r',!!wa);_sv('p-wa',wa);\n"
+    "_sv('p-apto',apto||'—');\n"
+    "_sd('p-ci-r',!!ci);_sv('p-ci',fd(ci));\n"
+    "_sd('p-co-r',!!co);_sv('p-co',fd(co));\n"
+    "_sd('p-noch-r',!!noch);_sv('p-noch',noch+(noch?' noches':''));\n"
+    "_sv('p-monto',monto?sym+' '+monto:'—');\n"
+    "var hasSaldo=saldo&&saldo!=='0,00'&&tipo!=='final';\n"
+    "_sb('p-saldo-r',!!hasSaldo);\n"
+    "if(hasSaldo)_sv('p-saldo',sym+' '+saldo);\n"
+    "_sb('p-nota-b',!!nota);_sv('p-nota',nota);\n"
+    "_sv('p-foot',footer);\n"
+    "var polEl=document.getElementById('tog-pol');\n"
+    "var polOn=polEl&&polEl.checked;\n"
+    "_sb('p-pol-b',!!polOn);\n"
+    "if(polOn){var pt=document.getElementById('pol-txt');_sv('p-pol',pt?pt.value:'');}\n"
+    "var enEl=document.getElementById('tog-en');\n"
+    "var enOn=enEl&&enEl.checked;\n"
+    "_sb('p-en-b',!!enOn);\n"
+    "if(enOn){var et=document.getElementById('en-txt');_sv('p-en',et?et.value:'');}\n"
+    "var cdEl=document.getElementById('tog-cd');\n"
+    "var cdOn=cdEl&&cdEl.checked;\n"
+    "_sb('p-cd-b',!!cdOn);\n"
+    "if(cdOn){var ct=document.getElementById('cd-txt');_sv('p-cd',ct?ct.value:'');}\n"
+    "var rows=document.getElementById('svc-container').querySelectorAll('.svc-row');\n"
+    "var svcs=[];\n"
+    "rows.forEach(function(r){\n"
+    "var ins=r.querySelectorAll('input');\n"
+    "var c2=(ins[0]&&ins[0].value.trim())||'';\n"
+    "var p2=(ins[1]&&ins[1].value.trim())||'';\n"
+    "var re=(ins[2]&&ins[2].value.trim())||'';\n"
+    "if(c2||p2||re)svcs.push({c:c2,p:p2,re:re});});\n"
+    "var ss=document.getElementById('p-svc-s');\n"
+    "var se=document.getElementById('p-svcs');\n"
+    "if(svcs.length&&ss&&se){\n"
+    "ss.style.display='block';\n"
+    "se.innerHTML=svcs.map(function(s){"
+    "return '<div class=\"p-row\"><span>'+s.c+'</span><strong>'+(s.re?sym+' '+s.re:(s.p?'$ '+s.p:''))+'</strong></div>';"
+    "}).join('');}\n"
+    "else if(ss)ss.style.display='none';}\n"
+    "document.addEventListener('DOMContentLoaded',function(){\n"
+    "document.getElementById('f-total').addEventListener('input',calcSaldo);\n"
+    "document.getElementById('f-total').addEventListener('blur',function(){fmtField(this);calcSaldo();});\n"
+    "document.getElementById('f-monto').addEventListener('input',calcSaldo);\n"
+    "document.getElementById('f-monto').addEventListener('blur',function(){fmtField(this);calcSaldo();});\n"
+    "updatePreview();\n"
+    "});\n"
+)
 
 _JS_RECIBO_HIST = """
 async function openHistorial(){
@@ -3528,7 +3651,7 @@ def nuevo_recibo_form():
     if edit_id:
         edata = _load_receipts().get(edit_id, {})
     numero = edata.get("numero") or _next_recibo_num()
-    today = _date.today().strftime("%d/%m/%Y")
+    today_iso = _date.today().isoformat()  # yyyy-mm-dd para input type=date
 
     POL_DEFAULT = (
         "Hasta 30 dias antes del check-in: cancelacion gratuita, reintegro del 100%.\n"
@@ -3541,21 +3664,25 @@ def nuevo_recibo_form():
 
     edit_id_html = ("<input type='hidden' name='edit_id' value='" + edit_id + "'>") if edit_id else ""
     _ed_json = _json.dumps(edata, ensure_ascii=False) if edata else ""
+
+    # Prefill JS: convierte fechas dd/mm/yyyy → yyyy-mm-dd para date inputs
     prefill_js_html = (
         "<script>document.addEventListener('DOMContentLoaded',function(){"
         "var ed=" + _ed_json + ";"
         "if(!Object.keys(ed).length)return;"
         "var f=document.getElementById('f');"
-        "function sv(n,v){var el=f.querySelector('[name=\"'+n+'\"]');if(el&&v!==undefined&&v!==null)el.value=v;}"
+        "function sv(n,v){var el=f.querySelector('[name=\"'+n+'\"]');if(el&&v!==undefined&&v!==null&&v!=='')el.value=v;}"
+        "function toIso(s){if(!s)return '';var p=s.split('/');return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:s;}"
         "sv('nombre',ed.nombre);sv('apellido',ed.apellido);sv('dni',ed.dni);sv('wa',ed.wa);sv('email',ed.email);"
-        "sv('apto',ed.apto);sv('apto_desc',ed.apto_desc);sv('checkin',ed.checkin);sv('checkout',ed.checkout);"
+        "sv('apto',ed.apto);sv('apto_desc',ed.apto_desc);"
+        "sv('checkin',toIso(ed.checkin));sv('checkout',toIso(ed.checkout));"
         "sv('noches',ed.noches);sv('personas',ed.personas);"
         "sv('monto',ed.monto);sv('ref',ed.ref);sv('total',ed.total);sv('saldo',ed.saldo);sv('nota',ed.nota);"
         "sv('pol_texto',ed.pol_texto);sv('energia_texto',ed.energia_texto);sv('condo_texto',ed.condo_texto);"
-        "sv('footer_texto',ed.footer_texto);sv('fecha_pago',ed.fecha_pago);"
+        "sv('footer_texto',ed.footer_texto);sv('fecha_pago',toIso(ed.fecha_pago));"
         "if(ed.moneda){var ms=f.querySelector('[name=\"moneda\"]');if(ms)ms.value=ed.moneda;}"
         "if(ed.forma_pago){var fps=f.querySelector('[name=\"forma_pago\"]');if(fps)fps.value=ed.forma_pago;}"
-        "if(ed.tipo){document.querySelectorAll('.tipo-btn').forEach(function(b){if(b.dataset.tipo===ed.tipo){setTipo(b);}});}"
+        "if(ed.tipo){var ts=document.getElementById('tipo-val');if(ts)ts.value=ed.tipo;}"
         "['pol','energia','condo'].forEach(function(k){"
         "var show=ed['show_'+k]==='1';var cb=document.getElementById('tog-'+k);"
         "if(cb&&show){cb.checked=true;tog(cb,'sec-'+k);}});"
@@ -3569,6 +3696,7 @@ def nuevo_recibo_form():
         "last.querySelector('[name=\"svc_desc[]\"]').value=s.desc||'';"
         "last.querySelector('[name=\"svc_pesos[]\"]').value=s.pesos||'';"
         "last.querySelector('[name=\"svc_reales[]\"]').value=s.reales||'';}});}"
+        "updatePreview();"
         "});</script>"
     ) if edata else ""
 
@@ -3578,74 +3706,80 @@ def nuevo_recibo_form():
         "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>"
         "<title>Nuevo Recibo \xb7 Porto Flats</title>"
         "<style>" + _CSS_RECIBO_FORM + "</style></head><body>"
-        "<div class='header' style='position:relative'><div class='logo'>Porto Flats</div>"
+
+        # Header
+        "<div class='header'>"
+        "<div class='logo'>Porto Flats</div>"
         "<div class='logo-sub'>Nuevo Recibo de Pago</div>"
-        "<div style='position:absolute;top:14px;right:14px'>"
-        "<button type='button' class='btn-hist-trigger' onclick='openHistorial()'>&#x1F4CB; Historial</button>"
-        "</div></div>"
+        "</div>"
+
+        # Nav bar
+        "<div class='nav'>"
+        "<span class='nav-title'>Nuevo recibo</span>"
+        "<button type='button' class='nbtn' onclick='openHistorial()'>&#x1F4CB; Historial</button>"
+        "<button type='button' class='nbtn' onclick=\"document.getElementById('set-ov').classList.add('open')\">&#x2699; Ajustes</button>"
+        "</div>"
+
         "<form id='f' action='/nuevo-recibo' method='POST'>"
-        "<input type='hidden' name='tipo' id='tipo-val' value='reserva'>"
         + edit_id_html
 
-        # Tipo
+        # Tipo dropdown
         + "<div class='card'>"
-        "<div class='sec-title'>Tipo de recibo</div>"
-        "<div class='tipo-btns'>"
-        "<button type='button' class='tipo-btn active' data-tipo='reserva' onclick='setTipo(this)'>&#x2705; Reserva</button>"
-        "<button type='button' class='tipo-btn' data-tipo='parcial' onclick='setTipo(this)'>&#x1F7E0; Pago Parcial</button>"
-        "<button type='button' class='tipo-btn' data-tipo='final' onclick='setTipo(this)'>&#x1F3C1; Pago Final</button>"
-        "</div></div>"
-        "<script>function setTipo(el){document.querySelectorAll('.tipo-btn').forEach(function(b){b.classList.remove('active');});el.classList.add('active');document.getElementById('tipo-val').value=el.dataset.tipo;}</script>"
+        "<div class='st'>&#x1F9FE; Tipo de recibo</div>"
+        "<div class='fi'><label>Tipo</label>"
+        "<select name='tipo' id='tipo-val' onchange='onTipoChange()'>"
+        "<option value='reserva'>&#x2705; Reserva</option>"
+        "<option value='parcial'>&#x1F7E0; Pago parcial</option>"
+        "<option value='final'>&#x1F3C1; Pago final</option>"
+        "</select></div></div>"
 
-        # N\xba y fecha
+        # Identificación
         "<div class='card'>"
-        "<div class='sec-title'>Identificaci\xf3n</div>"
-        "<div class='row'>"
-        "<div class='field'><label>N\xba de recibo</label><input name='numero' value='" + numero + "' required></div>"
-        "<div class='field'><label>Fecha</label><input name='fecha_pago' value='" + today + "' required></div>"
+        "<div class='st'>&#x1F4CB; Identificaci\xf3n</div>"
+        "<div class='r2'>"
+        "<div class='fi'><label>N\xba de recibo</label><input id='f-num' name='numero' value='" + numero + "' required oninput='updatePreview()'></div>"
+        "<div class='fi'><label>Fecha</label><input id='f-fecha' name='fecha_pago' type='date' value='" + today_iso + "' required oninput='updatePreview()'></div>"
         "</div></div>"
 
         # Cliente
         "<div class='card'>"
-        "<div class='sec-title'>Cliente</div>"
-        "<div class='row'>"
-        "<div class='field'><label>Nombre</label><input name='nombre' required placeholder='Valeria'></div>"
-        "<div class='field'><label>Apellido</label><input name='apellido' placeholder='Acosta'></div>"
+        "<div class='st'>&#x1F464; Cliente</div>"
+        "<div class='r2'>"
+        "<div class='fi'><label>Nombre</label><input id='f-nom' name='nombre' required placeholder='Valeria' oninput='updatePreview()'></div>"
+        "<div class='fi'><label>Apellido</label><input id='f-ape' name='apellido' placeholder='Acosta' oninput='updatePreview()'></div>"
         "</div>"
-        "<div class='row'>"
-        "<div class='field'><label>DNI / Pasaporte <span style='color:#bbb'>(opcional)</span></label><input name='dni' placeholder='32.924.618'></div>"
-        "<div class='field'><label>WhatsApp <span style='color:#bbb'>(opcional)</span></label><input name='wa' placeholder='+54 9 11...'></div>"
+        "<div class='r2'>"
+        "<div class='fi'><label>DNI / Pasaporte</label><input name='dni' placeholder='32.924.618'></div>"
+        "<div class='fi'><label>WhatsApp</label><input id='f-wa' name='wa' placeholder='+54 9 11...' oninput='updatePreview()'></div>"
         "</div>"
-        "<div class='field'><label>Email <span style='color:#bbb'>(opcional)</span></label><input name='email' type='email' placeholder='correo@ejemplo.com'></div>"
+        "<div class='fi'><label>Email</label><input name='email' type='email' placeholder='correo@ejemplo.com'></div>"
         "</div>"
 
         # Reserva
         "<div class='card'>"
-        "<div class='sec-title'>Reserva</div>"
-        "<div class='row'>"
-        "<div class='field'><label>Apartamento</label><input name='apto' placeholder='Nixxus Premium' required></div>"
-        "<div class='field'><label>Descripci\xf3n <span style='color:#bbb'>(opcional)</span></label><input name='apto_desc' placeholder='2 cuartos / 2 ba\xf1os'></div>"
+        "<div class='st'>&#x1F3E0; Reserva</div>"
+        "<div class='r2'>"
+        "<div class='fi'><label>Apartamento</label><input id='f-apto' name='apto' placeholder='Nixxus Premium' required oninput='updatePreview()'></div>"
+        "<div class='fi'><label>Descripci\xf3n</label><input name='apto_desc' placeholder='2 cuartos / 2 ba\xf1os'></div>"
         "</div>"
-        "<div class='row'>"
-        "<div class='field'><label>Check-in <span style='color:#bbb'>(opcional)</span></label><input name='checkin' placeholder='20/07/2026'></div>"
-        "<div class='field'><label>Check-out <span style='color:#bbb'>(opcional)</span></label><input name='checkout' placeholder='27/07/2026'></div>"
+        "<div class='r2'>"
+        "<div class='fi'><label>Check-in</label><input id='f-ci' name='checkin' type='date' onchange='calcNights()'></div>"
+        "<div class='fi'><label>Check-out</label><input id='f-co' name='checkout' type='date' onchange='calcNights()'></div>"
         "</div>"
-        "<div class='row'>"
-        "<div class='field'><label>Noches <span style='color:#bbb'>(opcional)</span></label><input name='noches' type='number' min='1' placeholder='7'></div>"
-        "<div class='field'><label>Personas <span style='color:#bbb'>(opcional)</span></label><input name='personas' type='number' min='1' placeholder='2'></div>"
+        "<div class='r2'>"
+        "<div class='fi'><label>Noches (auto)</label><input id='f-noches' name='noches' readonly></div>"
+        "<div class='fi'><label>Personas</label><input name='personas' type='number' min='1' placeholder='2'></div>"
         "</div></div>"
 
         # Servicios
         "<div class='card'>"
-        "<div class='sec-title'>Detalle de servicios <span style='color:#bbb;font-size:9px'>(opcional)</span></div>"
-        "<div class='svc-head'>"
-        "<span>Concepto</span><span>Pesos</span><span>Reales</span><span></span>"
-        "</div>"
+        "<div class='st'>&#x1F4E6; Servicios <span style='color:#C4BDB8;font-weight:400;font-size:9px;text-transform:none;letter-spacing:0'>(opcional)</span></div>"
+        "<div class='svc-head'><span>Concepto</span><span>Pesos</span><span>Reales</span><span></span></div>"
         "<div id='svc-container'>"
         "<div class='svc-row' id='svc-row-0'>"
-        "<input name='svc_desc[]' placeholder='Anticipo reserva'>"
-        "<input name='svc_pesos[]' placeholder='$ 0'>"
-        "<input name='svc_reales[]' placeholder='R$ 0'>"
+        "<input name='svc_desc[]' placeholder='Anticipo reserva' oninput='updatePreview()'>"
+        "<input name='svc_pesos[]' placeholder='$ 0' onblur='fmtField(this)' oninput='updatePreview()'>"
+        "<input name='svc_reales[]' placeholder='R$ 0' onblur='fmtField(this)' oninput='updatePreview()'>"
         "<div></div>"
         "</div>"
         "</div>"
@@ -3654,81 +3788,189 @@ def nuevo_recibo_form():
 
         # Pago
         "<div class='card'>"
-        "<div class='sec-title'>Pago</div>"
-        "<div class='row'>"
-        "<div class='field'><label>Monto abonado</label><input name='monto' id='f-monto' required placeholder='2.345,00'></div>"
-        "<div class='field'><label>Moneda</label>"
-        "<select name='moneda'><option value='BRL'>BRL R$</option><option value='USD'>USD U$S</option><option value='ARS'>ARS $</option></select>"
-        "</div></div>"
-        "<div class='field'><label>Forma de pago</label>"
+        "<div class='st'>&#x1F4B3; Pago</div>"
+        "<div class='r2'>"
+        "<div class='fi'><label>Monto abonado</label><input id='f-monto' name='monto' required placeholder='2.400,00'></div>"
+        "<div class='fi'><label>Moneda</label>"
+        "<select id='f-moneda' name='moneda' onchange='updatePreview()'>"
+        "<option value='BRL'>BRL — R$</option>"
+        "<option value='USD'>USD — U$S</option>"
+        "<option value='ARS'>ARS — $</option>"
+        "</select></div></div>"
+        "<div class='fi'><label>Forma de pago</label>"
         "<select name='forma_pago'>"
         "<option>PIX</option><option>Transferencia bancaria</option>"
         "<option>Tarjeta de cr\xe9dito</option><option>Efectivo</option><option>USDT</option>"
         "</select></div>"
-        "<div class='field'><label>Referencia / ID <span style='color:#bbb'>(opcional)</span></label><input name='ref' placeholder='TRF-12345'></div>"
+        "<div class='fi'><label>Referencia / ID</label><input name='ref' placeholder='TRF-12345'></div>"
         "</div>"
 
         # Resumen
         "<div class='card'>"
-        "<div class='sec-title'>Resumen financiero <span style='color:#bbb;font-size:9px'>(opcional)</span></div>"
-        "<div class='row'>"
-        "<div class='field'><label>Valor total</label><input name='total' id='f-total' placeholder='4.690,00'></div>"
-        "<div class='field'><label>Saldo pendiente</label><input name='saldo' id='f-saldo' placeholder='2.345,00'></div>"
+        "<div class='st'>&#x1F4B0; Resumen <span style='color:#C4BDB8;font-weight:400;font-size:9px;text-transform:none;letter-spacing:0'>(opcional)</span></div>"
+        "<div class='r2'>"
+        "<div class='fi'><label>Valor total</label><input id='f-total' name='total' placeholder='4.800,00'></div>"
+        "<div class='fi'><label>Saldo pendiente (auto)</label><input id='f-saldo' name='saldo' readonly></div>"
         "</div>"
-        "<div class='field'><label>Nota / concepto <span style='color:#bbb'>(opcional)</span></label>"
-        "<textarea name='nota' rows='2' placeholder='Saldo a pagar 72hs antes o en el check-in.'></textarea>"
+        "<div class='fi'><label>Nota / concepto</label>"
+        "<textarea id='f-nota' name='nota' rows='2' placeholder='Saldo a pagar 72hs antes del check-in.' oninput='updatePreview()'></textarea>"
         "</div></div>"
 
-        # Pol\xedtica de cancelaci\xf3n
+        # Política cancelación
         "<div class='card'>"
-        "<div class='toggle-row'>"
-        "<span class='toggle-label'>&#x1F4CB; Pol\xedtica de cancelaci\xf3n</span>"
+        "<div class='togrow'>"
+        "<span class='toglbl'>&#x1F4CB; Pol\xedtica de cancelaci\xf3n</span>"
         "<label class='toggle'><input type='checkbox' id='tog-pol' name='show_pol' value='1' onchange=\"tog(this,'sec-pol')\"><span class='slider-tog'></span></label>"
         "</div>"
-        "<div class='sec-collapsible' id='sec-pol'>"
-        "<textarea name='pol_texto' rows='4' placeholder='Ej: Hasta 30 d\xedas antes...'>" + POL_DEFAULT + "</textarea>"
+        "<div class='sec-coll' id='sec-pol'>"
+        "<textarea id='pol-txt' name='pol_texto' rows='4' oninput='updatePreview()'>" + POL_DEFAULT + "</textarea>"
         "</div></div>"
 
-        # Energ\xeda
+        # Energía
         "<div class='card'>"
-        "<div class='toggle-row'>"
-        "<span class='toggle-label'>&#x26A1; Energ\xeda</span>"
+        "<div class='togrow'>"
+        "<span class='toglbl'>&#x26A1; Energ\xeda</span>"
         "<label class='toggle'><input type='checkbox' id='tog-en' name='show_energia' value='1' onchange=\"tog(this,'sec-energia')\"><span class='slider-tog'></span></label>"
         "</div>"
-        "<div class='sec-collapsible' id='sec-energia'>"
-        "<textarea name='energia_texto' rows='2'>" + ENERGIA_DEFAULT + "</textarea>"
+        "<div class='sec-coll' id='sec-energia'>"
+        "<textarea id='en-txt' name='energia_texto' rows='2' oninput='updatePreview()'>" + ENERGIA_DEFAULT + "</textarea>"
         "</div></div>"
 
         # Condominio
         "<div class='card'>"
-        "<div class='toggle-row'>"
-        "<span class='toggle-label'>&#x1F3E2; Condominio</span>"
+        "<div class='togrow'>"
+        "<span class='toglbl'>&#x1F3E2; Condominio</span>"
         "<label class='toggle'><input type='checkbox' id='tog-cd' name='show_condo' value='1' onchange=\"tog(this,'sec-condo')\"><span class='slider-tog'></span></label>"
         "</div>"
-        "<div class='sec-collapsible' id='sec-condo'>"
-        "<textarea name='condo_texto' rows='2'>" + CONDO_DEFAULT + "</textarea>"
+        "<div class='sec-coll' id='sec-condo'>"
+        "<textarea id='cd-txt' name='condo_texto' rows='2' oninput='updatePreview()'>" + CONDO_DEFAULT + "</textarea>"
         "</div></div>"
 
-        # Footer empresa
+        # Footer
         "<div class='card'>"
-        "<div class='sec-title'>Pie de p\xe1gina</div>"
-        "<input name='footer_texto' value='" + FOOTER_DEFAULT + "' placeholder='Empresa / CNPJ'>"
+        "<div class='st'>&#x1F3E2; Pie de p\xe1gina</div>"
+        "<div class='fi'><input id='f-footer' name='footer_texto' value='" + FOOTER_DEFAULT + "' placeholder='Empresa / CNPJ' oninput='updatePreview()'></div>"
         "</div>"
 
-        "<div style='margin:0 14px'>"
-        "<button type='submit' name='accion' value='guardar' class='btn-submit btn-submit-blue btn-submit-mb'>&#x1F4BE; Guardar en historial</button>"
-        "<button type='submit' name='accion' value='generar' class='btn-submit'>&#x1F4C4; Generar Recibo</button>"
-        "</div>"
         "</form>"
+
+        # Vista previa
+        "<div class='prev-wrap'>"
+        "<div class='prev-lbl'>&#x1F441; Vista previa — como ve el cliente</div>"
+        "<div class='p-hdr'>"
+        "<div class='p-logo'>Porto Flats</div>"
+        "<div class='p-tipo' id='p-tipo'>RECIBO DE RESERVA</div>"
+        "<div class='p-num' id='p-num'>" + numero + "</div>"
+        "</div>"
+        "<div class='p-body'>"
+        "<div class='p-sec'>"
+        "<div class='p-sect'>Cliente</div>"
+        "<div class='p-row'><span>Nombre</span><strong id='p-nom'>—</strong></div>"
+        "<div class='p-row' id='p-wa-r' style='display:none'><span>WhatsApp</span><strong id='p-wa'></strong></div>"
+        "</div>"
+        "<div class='p-sec'>"
+        "<div class='p-sect'>Reserva</div>"
+        "<div class='p-row'><span>Apartamento</span><strong id='p-apto'>—</strong></div>"
+        "<div class='p-row' id='p-ci-r' style='display:none'><span>Check-in</span><strong id='p-ci'></strong></div>"
+        "<div class='p-row' id='p-co-r' style='display:none'><span>Check-out</span><strong id='p-co'></strong></div>"
+        "<div class='p-row' id='p-noch-r' style='display:none'><span>Noches</span><strong id='p-noch'></strong></div>"
+        "</div>"
+        "<div id='p-svc-s' class='p-sec' style='display:none'>"
+        "<div class='p-sect'>Servicios</div>"
+        "<div id='p-svcs'></div>"
+        "</div>"
+        "<div class='p-box'>"
+        "<div class='p-boxr'><span>Monto abonado</span><span id='p-monto'>—</span></div>"
+        "<div class='p-saldo' id='p-saldo-r' style='display:none'>Saldo pendiente: <strong id='p-saldo'></strong></div>"
+        "</div>"
+        "<div class='p-nota' id='p-nota-b' style='display:none'><span id='p-nota'></span></div>"
+        "<div class='p-cond' id='p-pol-b' style='display:none'><span class='p-cond-t'>Pol\xedtica de cancelaci\xf3n</span><span id='p-pol'></span></div>"
+        "<div class='p-cond' id='p-en-b' style='display:none'><span class='p-cond-t'>Energ\xeda</span><span id='p-en'></span></div>"
+        "<div class='p-cond' id='p-cd-b' style='display:none'><span class='p-cond-t'>Condominio</span><span id='p-cd'></span></div>"
+        "</div>"
+        "<div class='p-foot' id='p-foot'>" + FOOTER_DEFAULT + "</div>"
+        "<div class='p-dlwrap'><button class='p-dlbtn' type='button'>&#x2B07;&#xFE0F; Descargar PDF</button></div>"
+        "</div>"
+
+        # Barra de acciones
+        "<div class='actbar'>"
+        "<button type='submit' form='f' name='accion' value='guardar' class='btn-save'>&#x1F4BE; Guardar</button>"
+        "<button type='submit' form='f' name='accion' value='enviar_wa' class='btn-wa'>&#x1F4F2; Generar + WhatsApp</button>"
+        "</div>"
+
         + prefill_js_html
+
+        # Modal Historial
         + "<div class='modal-overlay' id='hist-overlay' onclick='closeHistorial(event)'>"
-        "<div class='modal-box' id='hist-box'>"
+        "<div class='modal-box'>"
+        "<div class='modal-head'>"
+        "<h3>&#x1F4CB; Historial de recibos</h3>"
         "<button class='modal-close' onclick='closeHistorial()'>&#x2715;</button>"
-        "<div class='modal-title'>&#x1F4CB; Historial de recibos</div>"
-        "<div class='modal-sub' id='hist-sub'></div>"
+        "</div>"
+        "<div class='mbody'>"
+        "<div id='hist-sub' style='font-size:11px;color:#999;margin-bottom:10px'></div>"
         "<div id='hist-list'></div>"
+        "</div></div></div>"
+
+        # Modal Ajustes
+        "<div class='modal-overlay' id='set-ov' onclick=\"if(event.target===this)this.classList.remove('open')\">"
+        "<div class='modal-box'>"
+        "<div class='modal-head'>"
+        "<h3>&#x2699; Ajustes del sistema</h3>"
+        "<button class='modal-close' onclick=\"document.getElementById('set-ov').classList.remove('open')\">&#x2715;</button>"
+        "</div>"
+        "<div class='mbody'>"
+        "<div class='mcard'>"
+        "<div class='msec'>&#x1F3E2; Empresa</div>"
+        "<div class='mfi'><label>Raz\xf3n social</label><input id='s-emp' placeholder='M&amp;A Empreendimentos Ltda.'></div>"
+        "<div class='mfi'><label>CNPJ / RUT</label><input id='s-cnpj' placeholder='51.057.038/0001-31'></div>"
+        "<div class='mfi'><label>Pie de p\xe1gina</label><input id='s-foot' placeholder='Empresa / CNPJ'></div>"
+        "</div>"
+        "<div class='mcard'>"
+        "<div class='msec'>&#x1F4F1; WhatsApp y env\xedos</div>"
+        "<div class='mfi'><label>Mensaje de intro WA</label>"
+        "<textarea id='s-wmsg' rows='2' placeholder='Hola {nombre}, te env\xedo tu recibo!'></textarea>"
+        "</div>"
+        "<div class='mr2'>"
+        "<div class='mfi'><label>Moneda por defecto</label>"
+        "<select id='s-mon'><option value='BRL'>BRL — R$</option>"
+        "<option value='USD'>USD — U$S</option><option value='ARS'>ARS — $</option></select>"
+        "</div>"
+        "<div class='mfi'><label>Forma de pago</label>"
+        "<select id='s-fp'><option>PIX</option><option>Transferencia</option><option>Efectivo</option></select>"
         "</div></div>"
-        "<script>" + _JS_RECIBO_FORM + _JS_RECIBO_HIST + "</script>"
+        "</div>"
+        "<div class='mcard'>"
+        "<div class='msec'>&#x1F4CB; Textos predeterminados</div>"
+        "<div class='mfi'><label>Pol\xedtica de cancelaci\xf3n</label>"
+        "<textarea id='s-pol' rows='4'>" + POL_DEFAULT + "</textarea>"
+        "</div>"
+        "<div class='mfi'><label>Energ\xeda</label>"
+        "<textarea id='s-en' rows='2'>" + ENERGIA_DEFAULT + "</textarea>"
+        "</div>"
+        "<div class='mfi'><label>Condominio</label>"
+        "<textarea id='s-cd' rows='2'>" + CONDO_DEFAULT + "</textarea>"
+        "</div>"
+        "</div>"
+        "<div class='mcard'>"
+        "<div class='msec'>&#x1F522; Numeraci\xf3n</div>"
+        "<div class='mr2'>"
+        "<div class='mfi'><label>Prefijo</label><input id='s-prefix' value='REC-'></div>"
+        "<div class='mfi'><label>Pr\xf3ximo n\xba</label><input type='number' id='s-next' value='1' min='1'></div>"
+        "</div>"
+        "</div>"
+        "<button class='msave-btn' onclick='saveReciboSettings()'>&#x2705; Guardar configuraci\xf3n</button>"
+        "</div></div></div>"
+
+        "<div class='toast' id='toast'></div>"
+        "<script>" + _JS_RECIBO_FORM + _JS_RECIBO_HIST
+        + "function saveReciboSettings(){"
+        "document.getElementById('set-ov').classList.remove('open');"
+        "var t=document.getElementById('toast');"
+        "t.textContent='✅ Configuraci\xf3n guardada';"
+        "t.style.display='block';"
+        "setTimeout(function(){t.style.display='none';},2500);}"
+        "</script>"
         "</body></html>"
     )
     return Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
@@ -3739,7 +3981,6 @@ def nuevo_recibo_post():
     from datetime import datetime as _dt
     fv = lambda k, d="": request.form.get(k, d).strip()
 
-    # Servicios (arrays)
     svcs = []
     descs = request.form.getlist("svc_desc[]")
     pesos = request.form.getlist("svc_pesos[]")
@@ -3756,6 +3997,7 @@ def nuevo_recibo_post():
     edit_id = fv("edit_id")
     recs_pre = _load_receipts()
     rid = edit_id if (edit_id and edit_id in recs_pre) else _sec_mod.token_hex(5)
+
     rec = {
         "id": rid,
         "created": _dt.utcnow().isoformat(),
@@ -3789,16 +4031,48 @@ def nuevo_recibo_post():
         "condo_texto": fv("condo_texto"),
         "footer_texto": fv("footer_texto"),
     }
+
+    def _fmt_date(s):
+        if s and len(s) == 10 and s[4] == "-":
+            p = s.split("-")
+            return p[2] + "/" + p[1] + "/" + p[0]
+        return s
+
+    rec["checkin"] = _fmt_date(rec.get("checkin", ""))
+    rec["checkout"] = _fmt_date(rec.get("checkout", ""))
+    rec["fecha_pago"] = _fmt_date(rec.get("fecha_pago", ""))
+
     recs = _load_receipts()
     recs[rid] = rec
     _save_receipts(recs)
 
     base = os.environ.get("PROPUESTAS_DOMAIN", request.host_url.rstrip("/"))
-    accion = fv("accion", "generar")
+    accion = fv("accion", "enviar_wa")
+
     if accion == "guardar":
         return redirect(base + "/nuevo-recibo?saved=1")
+
+    if accion == "enviar_wa":
+        wa_raw = rec.get("wa", "").strip()
+        wa_num = wa_raw.replace(" ", "").replace("-", "").replace("+", "")
+        if wa_num:
+            nombre_cl = (rec.get("nombre", "") + " " + rec.get("apellido", "")).strip() or "cliente"
+            sym = {"BRL": "R$", "USD": "U$S", "ARS": "$"}.get(rec.get("moneda", "BRL"), "R$")
+            link = base + "/recibo/" + rid
+            msg = (
+                "¡Hola " + nombre_cl + "! \U0001f44b\n\n"
+                "Te enviamos tu recibo de pago " + rec.get("numero", "") + " de Porto Flats.\n\n"
+                "\U0001f4b0 Monto abonado: " + sym + " " + rec.get("monto", "") + "\n"
+                "\U0001f4cb Ver comprobante:\n" + link + "\n\n"
+                "¡Muchas gracias! \U0001f3e0"
+            )
+            _evo_send_text(wa_num, msg)
+        return redirect(base + "/recibo/" + rid + "?wa=sent")
+
     return redirect(base + "/recibo/" + rid)
 
+
+# ─── Ver recibo (vista cliente) ────────────────────────────────────────────────
 
 @app.route("/recibo/<rid>", methods=["GET"])
 def ver_recibo(rid):
@@ -3809,260 +4083,196 @@ def ver_recibo(rid):
 
     tipo = rec.get("tipo", "reserva")
     tipo_labels = {
-        "reserva":  ("✅", "Reserva Confirmada"),
-        "parcial":  ("\U0001f7e0", "Pago Parcial Recibido"),
-        "final":    ("\U0001f3c1", "Pago Final Completado"),
+        "reserva": ("✅", "Reserva Confirmada", "#2E7D32"),
+        "parcial": ("\U0001f7e0", "Pago Parcial Recibido", "#E65100"),
+        "final":   ("\U0001f3c1", "Pago Final Completado", "#1565C0"),
     }
-    tipo_ico, tipo_txt = tipo_labels.get(tipo, ("✅", "Recibo de Pago"))
+    tipo_ico, tipo_txt, tipo_color = tipo_labels.get(tipo, ("✅", "Recibo de Pago", "#2E7D32"))
+    tipo_lbl_map = {
+        "reserva": "RECIBO DE RESERVA",
+        "parcial": "RECIBO DE PAGO PARCIAL",
+        "final":   "RECIBO DE PAGO FINAL",
+    }
+    tipo_lbl = tipo_lbl_map.get(tipo, "RECIBO DE PAGO")
 
     nombre_full = (rec.get("nombre", "") + " " + rec.get("apellido", "")).strip()
     moneda = rec.get("moneda", "BRL")
     sym = {"BRL": "R$", "USD": "U$S", "ARS": "$"}.get(moneda, "R$")
+    numero = rec.get("numero", "")
+    fecha_pago = rec.get("fecha_pago", "")
+    apto = rec.get("apto", "")
+    apto_desc = rec.get("apto_desc", "")
+    checkin = rec.get("checkin", "")
+    checkout = rec.get("checkout", "")
+    noches = rec.get("noches", "")
+    monto = rec.get("monto", "")
+    saldo = rec.get("saldo", "")
+    nota = rec.get("nota", "")
+    show_pol = rec.get("show_pol", "")
+    pol_texto = rec.get("pol_texto", "")
+    show_energia = rec.get("show_energia", "")
+    energia_texto = rec.get("energia_texto", "")
+    show_condo = rec.get("show_condo", "")
+    condo_texto = rec.get("condo_texto", "")
+    footer_texto = rec.get("footer_texto", FOOTER_DEFAULT)
+    wa_sent = request.args.get("wa") == "sent"
+    wa_num = rec.get("wa", "")
 
-    def irow(ico, label, val):
-        if not val:
+    def _row(label, val, show=True):
+        if not show or not val:
             return ""
-        return (
-            "<div class='info-row'>"
-            "<span class='info-label'>" + ico + " " + label + "</span>"
-            "<span class='info-val'>" + str(val) + "</span>"
-            "</div>"
-        )
+        return "<div class='p-row'><span>" + label + "</span><strong>" + str(val) + "</strong></div>"
 
-    # Tabla de servicios
-    svc_rows = ""
-    for s in rec.get("servicios", []):
-        if s.get("desc"):
-            svc_rows += (
-                "<tr>"
-                "<td class='svc-desc'>" + s["desc"] + "</td>"
-                "<td>" + (s.get("pesos") or "—") + "</td>"
-                "<td style='font-weight:600;color:#87A286'>" + (s.get("reales") or "—") + "</td>"
-                "</tr>"
-            )
+    svcs_html = ""
+    servicios = rec.get("servicios", [])
+    if servicios:
+        rows_html = ""
+        for s in servicios:
+            desc = s.get("desc", "")
+            re_val = s.get("reales", "")
+            pe_val = s.get("pesos", "")
+            val_str = (sym + " " + re_val) if re_val else ("$ " + pe_val if pe_val else "")
+            if desc:
+                rows_html += "<div class='p-row'><span>" + desc + "</span><strong>" + val_str + "</strong></div>"
+        if rows_html:
+            svcs_html = "<div class='p-sec'><div class='p-sect'>Servicios</div>" + rows_html + "</div>"
 
-    svc_block = ""
-    if svc_rows:
-        svc_block = (
-            "<div class='card'>"
-            "<div class='sec-title'>Detalle de servicios</div>"
-            "<table class='svc-table'>"
-            "<thead><tr><th style='text-align:left'>Concepto</th><th>Pesos</th><th>Reales</th></tr></thead>"
-            "<tbody>" + svc_rows + "</tbody>"
-            "</table></div>"
-        )
+    saldo_html = ""
+    if saldo and saldo != "0,00" and tipo != "final":
+        saldo_html = "<div class='p-saldo'>Saldo pendiente: <strong>" + sym + " " + saldo + "</strong></div>"
 
-    # Resumen financiero
-    fin_monto = ""
-    fin_total = ""
-    fin_saldo = ""
-    if rec.get("monto"):
-        fin_monto = "<div class='total-card'><div><div class='total-label'>Monto abonado</div></div><div class='total-amount'><span class='total-sym'>" + sym + "</span>" + rec["monto"] + "</div></div>"
-    if rec.get("total"):
-        fin_total = "<div class='sub-card'><span class='sub-label'>\U0001f4cb Valor total</span><span class='sub-val'>" + sym + " " + rec["total"] + "</span></div>"
-    if rec.get("saldo"):
-        try:
-            sf = float(rec["saldo"].replace(",", "."))
-        except Exception:
-            sf = -1
-        if sf > 0:
-            fin_saldo = "<div class='saldo-card'><span class='saldo-label'>⏳ Saldo pendiente</span><span class='saldo-val'>" + sym + " " + rec["saldo"] + "</span></div>"
-        elif sf == 0:
-            fin_saldo = "<div class='saldo-card' style='background:#e8f5e9;border-color:#a5d6a7'><span class='saldo-label' style='color:#2e7d32'>✅ Sin saldo pendiente</span><span class='saldo-val' style='color:#2e7d32'>Pago completo</span></div>"
+    nota_html = ""
+    if nota:
+        nota_html = "<div class='p-nota'>" + nota + "</div>"
 
-    # Pol\xedticas
-    pol_block = ""
-    if rec.get("show_pol") == "1" and rec.get("pol_texto"):
-        items = [l.strip() for l in rec["pol_texto"].split("\n") if l.strip()]
-        pol_items = "".join("<div class='pol-item'>" + l + "</div>" for l in items)
-        pol_block = "<div class='card'><div class='sec-title'>\U0001f4cb Pol\xedtica de cancelaci\xf3n</div>" + pol_items + "</div>"
+    cond_html = ""
+    if show_pol == "1" and pol_texto:
+        cond_html += "<div class='p-cond'><span class='p-cond-t'>Pol\xedtica de cancelaci\xf3n</span><span>" + pol_texto + "</span></div>"
+    if show_energia == "1" and energia_texto:
+        cond_html += "<div class='p-cond'><span class='p-cond-t'>Energ\xeda</span><span>" + energia_texto + "</span></div>"
+    if show_condo == "1" and condo_texto:
+        cond_html += "<div class='p-cond'><span class='p-cond-t'>Condominio</span><span>" + condo_texto + "</span></div>"
 
-    extra_block = ""
-    if rec.get("show_energia") == "1" and rec.get("energia_texto"):
-        extra_block += "<div class='pol-item'>⚡ " + rec["energia_texto"] + "</div>"
-    if rec.get("show_condo") == "1" and rec.get("condo_texto"):
-        extra_block += "<div class='pol-item'>\U0001f3e2 " + rec["condo_texto"] + "</div>"
-    if extra_block:
-        extra_block = "<div class='card'><div class='sec-title'>Informaci\xf3n adicional</div>" + extra_block + "</div>"
+    base_url = os.environ.get("PROPUESTAS_DOMAIN", request.host_url.rstrip("/"))
+    pdf_url = base_url + "/recibo/" + rid + "/pdf"
 
-    nota_block = ""
-    if rec.get("nota"):
-        nota_block = "<div class='card'><div class='sec-title'>Nota</div><div class='nota-box'>" + rec["nota"] + "</div></div>"
+    wa_banner = ""
+    if wa_sent:
+        wa_banner = ("<div style='background:#E8F5E9;border-left:4px solid #4CAF50;padding:12px 16px;"
+                     "margin:10px 12px;border-radius:8px;font-size:13px;color:#2E7D32;font-weight:600;'>"
+                     "\U0001f4f2 Recibo enviado por WhatsApp a " + wa_num + "</div>")
 
-    footer_txt = rec.get("footer_texto") or "Porto Flats \xb7 Porto de Galinhas, PE, Brasil"
-
-    css_r = (
-        "*{box-sizing:border-box;margin:0;padding:0}"
-        "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#EDE9E3;color:#3D3D3D;min-height:100vh;padding-bottom:40px}"
-        ".header{background:#87A286;padding:20px 16px;text-align:center}"
-        ".logo{color:#fff;font-size:20px;font-weight:300;letter-spacing:5px;text-transform:uppercase}"
-        ".logo-sub{color:rgba(255,255,255,.7);font-size:11px;letter-spacing:2px;margin-top:3px}"
-        ".tipo-banner{background:#fff;padding:18px 16px 14px;border-bottom:1px solid #EDE9E3;display:flex;align-items:flex-start;justify-content:space-between}"
-        ".tipo-ico{font-size:30px;line-height:1;margin-bottom:4px}"
-        ".tipo-txt{font-size:16px;font-weight:600;color:#3D3D3D}"
-        ".tipo-sub{font-size:13px;color:#87A286;margin-top:2px}"
-        ".tipo-right{text-align:right}"
-        ".rec-num{font-size:12px;font-weight:700;color:#87A286;letter-spacing:1px;text-transform:uppercase}"
-        ".rec-fecha{font-size:11px;color:#aaa;margin-top:3px}"
-        ".badge{display:inline-block;background:#e8f5e9;color:#2e7d32;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;margin-top:6px}"
-        ".card{background:#fff;border-radius:14px;margin:12px 14px;padding:18px;box-shadow:0 2px 10px rgba(0,0,0,.06)}"
-        ".sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#87A286;margin-bottom:11px;padding-bottom:6px;border-bottom:1px solid #EDE9E3}"
-        ".info-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-bottom:1px solid #EDE9E3}"
-        ".info-row:last-child{border-bottom:none}"
-        ".info-label{color:#888}"
-        ".info-val{font-weight:500;text-align:right;max-width:60%}"
-        ".svc-table{width:100%;border-collapse:collapse;font-size:12px}"
-        ".svc-table th{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#aaa;font-weight:600;padding:0 0 8px;border-bottom:1px solid #EDE9E3}"
-        ".svc-table th:not(:first-child){text-align:right}"
-        ".svc-table td{padding:9px 0;border-bottom:1px solid #EDE9E3;font-size:13px}"
-        ".svc-table td:not(:first-child){text-align:right;color:#555}"
-        ".svc-table tr:last-child td{border-bottom:none}"
-        ".svc-desc{color:#3D3D3D;font-weight:500}"
-        ".total-card{background:#87A286;border-radius:14px;margin:12px 14px 0;padding:16px 18px;display:flex;justify-content:space-between;align-items:center}"
-        ".total-label{color:rgba(255,255,255,.85);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px}"
-        ".total-amount{color:#fff;font-size:24px;font-weight:700}"
-        ".total-sym{font-size:14px;font-weight:400;margin-right:3px}"
-        ".sub-card{background:#f5f5f0;border-radius:0 0 10px 10px;margin:0 14px;padding:10px 18px;display:flex;justify-content:space-between;align-items:center}"
-        ".sub-label{font-size:12px;color:#888}"
-        ".sub-val{font-size:13px;color:#555;font-weight:500}"
-        ".saldo-card{border-radius:10px;margin:4px 14px 12px;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;background:#FFF8EE;border:1px solid #f0d89a}"
-        ".saldo-label{font-size:12px;color:#b07d2a;font-weight:600}"
-        ".saldo-val{font-size:16px;color:#b07d2a;font-weight:700}"
-        ".pol-item{font-size:12px;color:#666;padding:6px 0;border-bottom:1px solid #EDE9E3;line-height:1.6}"
-        ".pol-item:last-child{border-bottom:none}"
-        ".nota-box{background:#F5F5F0;border-left:3px solid #87A286;border-radius:0 8px 8px 0;padding:10px 12px;font-size:13px;color:#5a4a3a;line-height:1.6}"
-        ".footer{text-align:center;padding:24px 16px;color:#aaa;font-size:11px;line-height:1.9}"
-        ".action-bar{display:flex;gap:10px;margin:16px 14px 4px;flex-wrap:wrap}"
-        ".btn-action{flex:1;min-width:130px;padding:14px 10px;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;text-align:center}"
-        ".btn-pdf{background:#4A90D9;color:#fff}"
-        ".btn-pdf:active{background:#357abd}"
-        "@media print{.action-bar{display:none}}"
+    html = (
+        "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>Recibo " + numero + " — Porto Flats</title>"
+        "<style>"
+        + _CSS_RECIBO_FORM +
+        "</style></head><body>"
+        "<div class='header'>"
+        "<div class='logo'>Porto Flats</div>"
+        "<div class='logo-sub'>Recibo de pago</div>"
+        "</div>"
+        + wa_banner +
+        "<div class='prev-wrap' style='margin:12px'>"
+        "<div class='p-hdr'>"
+        "<div class='p-logo'>Porto Flats</div>"
+        "<div class='p-tipo'>" + tipo_lbl + "</div>"
+        "<div class='p-num'>" + numero + (("· " + fecha_pago) if fecha_pago else "") + "</div>"
+        "</div>"
+        "<div class='p-body'>"
+        "<div class='p-sec'>"
+        "<div class='p-sect'>Cliente</div>"
+        + _row("Nombre", nombre_full)
+        + _row("WhatsApp", wa_num)
+        +
+        "</div>"
+        "<div class='p-sec'>"
+        "<div class='p-sect'>Reserva</div>"
+        + _row("Apartamento", (apto + (" — " + apto_desc if apto_desc else "")) if apto else "")
+        + _row("Check-in", checkin)
+        + _row("Check-out", checkout)
+        + _row("Noches", noches + " noches" if noches else "")
+        +
+        "</div>"
+        + svcs_html +
+        "<div class='p-box'>"
+        "<div class='p-boxr'><span>Monto abonado</span><span>" + sym + " " + monto + "</span></div>"
+        + saldo_html +
+        "</div>"
+        + nota_html
+        + cond_html +
+        "</div>"
+        "<div class='p-foot'>" + footer_texto + "</div>"
+        "<div class='p-dlwrap'>"
+        "<a href='" + pdf_url + "' class='p-dlbtn' download>&#x2B07;&#xFE0F; Descargar PDF</a>"
+        "</div>"
+        "</div>"
+        "</body></html>"
     )
-
-    # Cliente block
-    cliente_block = ""
-    cliente_rows = ""
-    if nombre_full: cliente_rows += irow("\U0001f464", "Nombre", nombre_full)
-    if rec.get("dni"): cliente_rows += irow("\U0001f4c4", "DNI / Pasaporte", rec["dni"])
-    if rec.get("wa"): cliente_rows += irow("\U0001f4f1", "WhatsApp", rec["wa"])
-    if rec.get("email"): cliente_rows += irow("✉️", "Email", rec["email"])
-    if cliente_rows:
-        cliente_block = "<div class='card'><div class='sec-title'>Cliente</div>" + cliente_rows + "</div>"
-
-    # Reserva block
-    reserva_block = ""
-    reserva_rows = ""
-    apto_str = rec.get("apto", "")
-    if rec.get("apto_desc"): apto_str += " — " + rec["apto_desc"]
-    if apto_str: reserva_rows += irow("\U0001f3e0", "Departamento", apto_str)
-    if rec.get("checkin"): reserva_rows += irow("\U0001f4c5", "Check-in", rec["checkin"] + " desde las 14:00")
-    if rec.get("checkout"): reserva_rows += irow("\U0001f4c5", "Check-out", rec["checkout"] + " hasta las 12:00")
-    if rec.get("noches"): reserva_rows += irow("\U0001f319", "Noches", rec["noches"])
-    if rec.get("personas"): reserva_rows += irow("\U0001f465", "Personas", rec["personas"])
-    if reserva_rows:
-        reserva_block = "<div class='card'><div class='sec-title'>Reserva</div>" + reserva_rows + "</div>"
-
-    # Pago detail
-    pago_extra = ""
-    if rec.get("forma_pago"): pago_extra += irow("\U0001f4b3", "Forma de pago", rec["forma_pago"])
-    if rec.get("fecha_pago"): pago_extra += irow("\U0001f4c6", "Fecha de pago", rec["fecha_pago"])
-    if rec.get("ref"): pago_extra += irow("\U0001f511", "Referencia", rec["ref"])
-    if pago_extra:
-        svc_block += "<div class='card'><div class='sec-title'>Datos del pago</div>" + pago_extra + "</div>"
-
-    parts = [
-        "<!DOCTYPE html><html lang='es'><head>",
-        "<meta charset='UTF-8'>",
-        "<meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'>",
-        "<title>Recibo " + rec.get("numero", rid) + " \xb7 Porto Flats</title>",
-        "<style>" + css_r + "</style></head><body>",
-        "<div class='header'><div class='logo'>Porto Flats</div>",
-        "<div class='logo-sub'>Porto de Galinhas \xb7 Pernambuco \xb7 Brasil</div></div>",
-        "<div class='tipo-banner'>",
-        "<div>",
-        "<div class='tipo-ico'>" + tipo_ico + "</div>",
-        "<div class='tipo-txt'>" + tipo_txt + "</div>",
-        ("<div class='tipo-sub'>" + nombre_full.upper() + "</div>") if nombre_full else "",
-        "</div>",
-        "<div class='tipo-right'>",
-        "<div class='rec-num'>" + rec.get("numero", rid) + "</div>",
-        ("<div class='rec-fecha'>" + rec.get("fecha_pago", "") + "</div>") if rec.get("fecha_pago") else "",
-        "<div class='badge'>Pago recibido</div>",
-        "</div></div>",
-        cliente_block,
-        reserva_block,
-        svc_block,
-        fin_monto,
-        fin_total,
-        fin_saldo,
-        nota_block,
-        pol_block,
-        extra_block,
-        "<div class='action-bar'>",
-        "<button class='btn-action btn-pdf' onclick='window.print()'>&#x2B07;&#xFE0F; Descargar PDF</button>",
-        "</div>",
-        "<div class='footer'><strong>" + footer_txt + "</strong><br>",
-        "Documento interno v\xe1lido como comprobante de pago.</div>",
-        "</body></html>",
-    ]
-    html_r = "".join(parts)
-    return Response(html_r.encode("utf-8"), content_type="text/html; charset=utf-8")
+    return Response(html.encode("utf-8"), content_type="text/html; charset=utf-8")
 
 
-@app.route("/api/historial-recibos", methods=["GET"])
-def api_historial_recibos():
-    from datetime import datetime as _dt2, timedelta as _td2
-    recs = _load_receipts()
-    setts = _load_settings()
-    dias = setts.get("dias_historial", 45)
-    cutoff = _dt2.utcnow() - _td2(days=dias)
-    out = []
-    for rid2, r in recs.items():
-        try:
-            created = _dt2.fromisoformat(r.get("created", ""))
-        except Exception:
-            created = _dt2.utcnow()
-        if created < cutoff:
-            continue
-        nombre_full = (r.get("nombre", "") + " " + r.get("apellido", "")).strip()
-        out.append({
-            "id": rid2,
-            "numero": r.get("numero", ""),
-            "nombre": nombre_full,
-            "tipo": r.get("tipo", "reserva"),
-            "fecha_pago": r.get("fecha_pago", ""),
-            "monto": r.get("monto", ""),
-            "moneda": r.get("moneda", "BRL"),
-            "created": r.get("created", ""),
-            "wa": r.get("wa", ""),
-        })
-    out.sort(key=lambda x: x["created"], reverse=True)
-    return jsonify(out)
-
-
-@app.route("/recibo/<rid>/enviar-wa", methods=["POST"])
-def enviar_recibo_wa(rid):
+@app.route("/recibo/<rid>/pdf", methods=["GET"])
+def recibo_pdf(rid):
     recs = _load_receipts()
     rec = recs.get(rid)
     if not rec:
-        return jsonify({"ok": False, "error": "Recibo no encontrado"}), 404
-    wa = rec.get("wa", "").strip().replace(" ", "").replace("-", "").replace("+", "")
-    if not wa:
-        return jsonify({"ok": False, "error": "Sin número de WhatsApp guardado en el recibo"}), 400
-    nombre = (rec.get("nombre", "") + " " + rec.get("apellido", "")).strip() or "cliente"
-    base = os.environ.get("PROPUESTAS_DOMAIN", request.host_url.rstrip("/"))
-    link = base + "/recibo/" + rid
-    sym = {"BRL": "R$", "USD": "U$S", "ARS": "$"}.get(rec.get("moneda", "BRL"), "R$")
-    msg = (
-        f"¡Hola {nombre}! 👋\n\n"
-        f"Te enviamos tu recibo de pago {rec.get('numero', '')} de Porto Flats.\n\n"
-        f"💰 Monto abonado: {sym} {rec.get('monto', '')}\n"
-        f"📋 Ver comprobante:\n{link}\n\n"
-        f"¡Muchas gracias! 🏠"
-    )
-    ok = _evo_send_text(wa, msg)
-    return jsonify({"ok": ok})
+        return "Recibo no encontrado.", 404
 
+    base_url = os.environ.get("PROPUESTAS_DOMAIN", request.host_url.rstrip("/"))
+    src_url = base_url + "/recibo/" + rid
+
+    try:
+        import pdfkit
+        options = {
+            "page-size": "A4",
+            "margin-top": "0",
+            "margin-right": "0",
+            "margin-bottom": "0",
+            "margin-left": "0",
+            "encoding": "UTF-8",
+            "no-outline": None,
+            "enable-local-file-access": None,
+        }
+        pdf_bytes = pdfkit.from_url(src_url, False, options=options)
+        numero = rec.get("numero", rid)
+        nombre = (rec.get("nombre", "") + " " + rec.get("apellido", "")).strip() or rid
+        fname = "recibo_" + numero + "_" + nombre.replace(" ", "_") + ".pdf"
+        return Response(
+            pdf_bytes,
+            content_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=\"" + fname + "\""},
+        )
+    except Exception as e:
+        return "Error generando PDF: " + str(e), 500
+
+
+# ─── API Historial ─────────────────────────────────────────────────────────────
+
+@app.route("/api/historial-recibos", methods=["GET"])
+def api_historial_recibos():
+    recs = _load_receipts()
+    lst = []
+    for rid, r in recs.items():
+        nombre_full = (r.get("nombre", "") + " " + r.get("apellido", "")).strip()
+        lst.append({
+            "id": rid,
+            "numero": r.get("numero", ""),
+            "tipo": r.get("tipo", "reserva"),
+            "nombre": nombre_full,
+            "apto": r.get("apto", ""),
+            "monto": r.get("monto", ""),
+            "moneda": r.get("moneda", "BRL"),
+            "fecha_pago": r.get("fecha_pago", ""),
+            "created": r.get("created", ""),
+            "wa": r.get("wa", ""),
+        })
+    lst.sort(key=lambda x: x.get("created", ""), reverse=True)
+    return jsonify({"recibos": lst})
+
+
+# ─── Eliminar recibo ───────────────────────────────────────────────────────────
 
 @app.route("/recibo/<rid>/delete", methods=["POST"])
 def delete_recibo(rid):
@@ -4070,8 +4280,32 @@ def delete_recibo(rid):
     if rid in recs:
         del recs[rid]
         _save_receipts(recs)
-    return jsonify({"ok": True})
+    base = os.environ.get("PROPUESTAS_DOMAIN", request.host_url.rstrip("/"))
+    return redirect(base + "/nuevo-recibo?saved=1")
 
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), debug=False)
+# ─── Reenviar WhatsApp ────────────────────────────────────────────────────────
+
+@app.route("/recibo/<rid>/enviar-wa", methods=["POST"])
+def enviar_recibo_wa(rid):
+    recs = _load_receipts()
+    rec = recs.get(rid)
+    if not rec:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    wa_raw = rec.get("wa", "").strip()
+    wa_num = wa_raw.replace(" ", "").replace("-", "").replace("+", "")
+    if not wa_num:
+        return jsonify({"ok": False, "error": "no wa number"}), 400
+    base = os.environ.get("PROPUESTAS_DOMAIN", request.host_url.rstrip("/"))
+    nombre_cl = (rec.get("nombre", "") + " " + rec.get("apellido", "")).strip() or "cliente"
+    sym = {"BRL": "R$", "USD": "U$S", "ARS": "$"}.get(rec.get("moneda", "BRL"), "R$")
+    link = base + "/recibo/" + rid
+    msg = (
+        "¡Hola " + nombre_cl + "! \U0001f44b\n\n"
+        "Te enviamos tu recibo de pago " + rec.get("numero", "") + " de Porto Flats.\n\n"
+        "\U0001f4b0 Monto abonado: " + sym + " " + rec.get("monto", "") + "\n"
+        "\U0001f4cb Ver comprobante:\n" + link + "\n\n"
+        "¡Muchas gracias! \U0001f3e0"
+    )
+    ok = _evo_send_text(wa_num, msg)
+    return jsonify({"ok": ok})
