@@ -23,8 +23,8 @@ TEXT_DARK = colors.HexColor("#3A3A3A")
 GREY      = colors.HexColor("#8A8A8A")
 WHITE     = colors.white
 
-W   = 100 * mm
-H   = 220 * mm
+W   = 100 * mm   # ancho del ticket
+H   = 220 * mm   # alto (se recorta si sobra)
 PAD =   8 * mm
 
 MONEDA_SYM = {"BRL": "R$", "ARS": "AR$", "USD": "US$"}
@@ -47,7 +47,7 @@ def draw_recibo(filename, data):
     c = canvas.Canvas(filename, pagesize=(W, H))
     y = H - PAD
 
-    # LOGO + MARCA
+    # ── LOGO + MARCA ────────────────────────────────────────────────
     logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "logo_seahorse_sage.png")
     lw = 7 * mm
@@ -62,13 +62,13 @@ def draw_recibo(filename, data):
     y -= 4.5 * mm
     c.setFont("Lato-Regular", 7)
     c.setFillColor(GREY)
-    c.drawCentredString(W / 2, y, "Porto de Galinhas  .  PE  .  Brasil")
+    c.drawCentredString(W / 2, y, "Porto de Galinhas  ·  PE  ·  Brasil")
     y -= 6 * mm
 
     _hline(c, y)
     y -= 7 * mm
 
-    # TITULO
+    # ── TITULO ──────────────────────────────────────────────────────
     c.setFont("Lato-Bold", 10)
     c.setFillColor(SAGE)
     c.drawCentredString(W / 2, y, "COMPROBANTE DE PAGO")
@@ -76,13 +76,13 @@ def draw_recibo(filename, data):
     c.setFont("Lato-Regular", 7.5)
     c.setFillColor(GREY)
     c.drawCentredString(W / 2, y,
-        "N " + data["numero"] + "   .   " + data["fecha_pago"])
+        "N° " + data["numero"] + "   ·   " + data["fecha_pago"])
     y -= 7 * mm
 
     _hline(c, y)
     y -= 7 * mm
 
-    # FILAS clave/valor
+    # ── FILAS clave/valor ───────────────────────────────────────────
     def row(label, val, bold_val=False):
         nonlocal y
         if not val:
@@ -113,7 +113,7 @@ def draw_recibo(filename, data):
     _hline(c, y)
     y -= 8 * mm
 
-    # MONTO grande
+    # ── MONTO (grande) ──────────────────────────────────────────────
     c.setFont("Lato-Regular", 7.5)
     c.setFillColor(GREY)
     c.drawCentredString(W / 2, y, "MONTO RECIBIDO")
@@ -125,7 +125,7 @@ def draw_recibo(filename, data):
     c.drawCentredString(W / 2, y, sym + " " + str(data["monto"]))
     y -= 9 * mm
 
-    # CAJA VERDE
+    # ── CAJA VERDE "PAGO RECIBIDO" ───────────────────────────────────
     box_h = 11 * mm
     c.setFillColor(SAGE)
     c.roundRect(PAD, y - box_h + 4 * mm, W - 2 * PAD, box_h,
@@ -135,7 +135,7 @@ def draw_recibo(filename, data):
     c.drawCentredString(W / 2, y - 3 * mm, "PAGO RECIBIDO")
     y -= box_h + 7 * mm
 
-    # FOOTER
+    # ── FOOTER (linea punteada + leyenda fiscal) ─────────────────────
     _hline(c, y, dashed=True)
     y -= 5 * mm
     c.setFont("Lato-Regular", 6.5)
@@ -143,11 +143,12 @@ def draw_recibo(filename, data):
     c.drawCentredString(W / 2, y, "NO VALIDO COMO COMPROBANTE FISCAL")
     y -= 4 * mm
     c.setFont("Lato-Light", 6)
-    c.drawCentredString(W / 2, y, "M&A Empreendimentos Ltda. . CNPJ: 51.057.038/0001-31")
+    c.drawCentredString(W / 2, y, "M&A Empreendimentos Ltda. · CNPJ: 51.057.038/0001-31")
 
     c.save()
 
 
+# ── TEST LOCAL ───────────────────────────────────────────────────────
 if __name__ == "__main__":
     sample = {
         "numero":     "REC-001",
@@ -163,4 +164,4 @@ if __name__ == "__main__":
         "forma_pago": "Transferencia bancaria",
     }
     draw_recibo("Recibo_PortoFlats_demo.pdf", sample)
-    print("OK - Recibo generado")
+    print("OK - Recibo_PortoFlats_demo.pdf generado")
