@@ -4312,3 +4312,6 @@ def enviar_recibo_wa(rid):
     )
     ok = _evo_send_text(wa_num, msg)
     return jsonify({"ok": ok})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
