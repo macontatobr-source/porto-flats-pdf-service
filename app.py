@@ -3333,6 +3333,16 @@ import secrets as _sec_mod
 
 _RECEIPTS_FILE = "/app/receipts.json"
 
+# Textos y defaults globales del módulo de recibos
+POL_DEFAULT = (
+    "Cancelación hasta 7 días antes del check-in: reembolso del 50% del depósito.\n"
+    "Cancelación con menos de 7 días: sin reembolso.\n"
+    "No-show: sin reembolso."
+)
+ENERGIA_DEFAULT = "Incluye uso racional de energia (10 Kw/dia). Excedente: R$ 2/Kw."
+CONDO_DEFAULT = "Condominio: R$ 250/mes. Se acordo abonar el 50%. No incluido en este recibo."
+FOOTER_DEFAULT = "M&A Empreendimentos Ltda. / CNPJ: 51.057.038/0001-31"
+
 def _load_receipts():
     try:
         with open(_RECEIPTS_FILE, "r", encoding="utf-8") as f:
@@ -3653,14 +3663,7 @@ def nuevo_recibo_form():
     numero = edata.get("numero") or _next_recibo_num()
     today_iso = _date.today().isoformat()  # yyyy-mm-dd para input type=date
 
-    POL_DEFAULT = (
-        "Hasta 30 dias antes del check-in: cancelacion gratuita, reintegro del 100%.\n"
-        "Dentro de los 30 dias: reembolso del 50% de lo abonado.\n"
-        "Reintegros en la misma moneda de pago."
-    )
-    ENERGIA_DEFAULT = "Incluye uso racional de energia (10 Kw/dia). Excedente: R$ 2/Kw."
-    CONDO_DEFAULT = "Condominio: R$ 250/mes. Se acordo abonar el 50%. No incluido en este recibo."
-    FOOTER_DEFAULT = "M&A Empreendimentos Ltda. / CNPJ: 51.057.038/0001-31"
+    # POL_DEFAULT / ENERGIA_DEFAULT / CONDO_DEFAULT / FOOTER_DEFAULT → globals
 
     edit_id_html = ("<input type='hidden' name='edit_id' value='" + edit_id + "'>") if edit_id else ""
     _ed_json = _json.dumps(edata, ensure_ascii=False) if edata else ""
@@ -4305,7 +4308,7 @@ def enviar_recibo_wa(rid):
         "Te enviamos tu recibo de pago " + rec.get("numero", "") + " de Porto Flats.\n\n"
         "\U0001f4b0 Monto abonado: " + sym + " " + rec.get("monto", "") + "\n"
         "\U0001f4cb Ver comprobante:\n" + link + "\n\n"
-        "¡Muchas gracias! \U0001f3e0"
+        "¡Muchas gracias! 🏠"
     )
     ok = _evo_send_text(wa_num, msg)
     return jsonify({"ok": ok})
