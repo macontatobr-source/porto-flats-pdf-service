@@ -3722,8 +3722,12 @@ def nuevo_recibo_form():
         "<button type='button' class='nbtn' onclick='openHistorial()'>&#x1F4CB; Historial</button>"
         "<button type='button' class='nbtn' onclick=\"document.getElementById('set-ov').classList.add('open')\">&#x2699; Ajustes</button>"
         "</div>"
-
-        "<form id='f' action='/nuevo-recibo' method='POST'>"
+        + (("<div style='background:#E8F5E9;border-left:4px solid #4CAF50;padding:12px 16px;"
+            "margin:10px 12px;border-radius:8px;font-size:14px;color:#2E7D32;font-weight:600;'>"
+            "&#x2705; Recibo guardado correctamente. "
+            "<a href='/recibo/" + edit_id + "' style='color:#1565C0;text-decoration:underline'>Ver recibo</a>"
+            "</div>") if (request.args.get("saved") == "1" and edit_id) else "")
+        + "<form id='f' action='/nuevo-recibo' method='POST'>"
         + edit_id_html
 
         # Tipo dropdown
@@ -4053,7 +4057,7 @@ def nuevo_recibo_post():
     accion = fv("accion", "enviar_wa")
 
     if accion == "guardar":
-        return redirect(base + "/nuevo-recibo?saved=1")
+        return redirect(base + "/nuevo-recibo?edit=" + rid + "&saved=1")
 
     if accion == "enviar_wa":
         wa_raw = rec.get("wa", "").strip()
@@ -4108,6 +4112,9 @@ def ver_recibo(rid):
     checkin = rec.get("checkin", "")
     checkout = rec.get("checkout", "")
     noches = rec.get("noches", "")
+    personas = rec.get("personas", "")
+    dni = rec.get("dni", "")
+    email = rec.get("email", "")
     monto = rec.get("monto", "")
     saldo = rec.get("saldo", "")
     nota = rec.get("nota", "")
@@ -4187,7 +4194,9 @@ def ver_recibo(rid):
         "<div class='p-sec'>"
         "<div class='p-sect'>Cliente</div>"
         + _row("Nombre", nombre_full)
+        + _row("DNI / Pasaporte", dni)
         + _row("WhatsApp", wa_num)
+        + _row("Email", email)
         +
         "</div>"
         "<div class='p-sec'>"
@@ -4196,6 +4205,7 @@ def ver_recibo(rid):
         + _row("Check-in", checkin)
         + _row("Check-out", checkout)
         + _row("Noches", noches + " noches" if noches else "")
+        + _row("Personas", personas + " personas" if personas else "")
         +
         "</div>"
         + svcs_html +
@@ -4209,6 +4219,8 @@ def ver_recibo(rid):
         "<div class='p-foot'>" + footer_texto + "</div>"
         "<div class='p-dlwrap'>"
         "<a href='" + pdf_url + "' class='p-dlbtn' download>&#x2B07;&#xFE0F; Descargar PDF</a>"
+        "<a href='/nuevo-recibo?edit=" + rid + "' class='p-dlbtn' style='background:#4A90D9;margin-top:8px'>&#x270F;&#xFE0F; Editar recibo</a>"
+        "<a href='/nuevo-recibo' class='p-dlbtn' style='background:#6c757d;margin-top:8px'>&#x2B05;&#xFE0F; Nuevo recibo</a>"
         "</div>"
         "</div>"
         "</body></html>"
@@ -4227,21 +4239,34 @@ def recibo_pdf(rid):
     src_url = base_url + "/recibo/" + rid
 
     try:
-        import pdfkit
-        options = {
-            "page-size": "A4",
-            "margin-top": "0",
-            "margin-right": "0",
-            "margin-bottom": "0",
-            "margin-left": "0",
-            "encoding": "UTF-8",
-            "no-outline": None,
-            "enable-local-file-access": None,
+        from build_recibo import draw_recibo
+        import tempfile, os as _os
+        nombre_full = (rec.get("nombre", "") + " " + rec.get("apellido", "")).strip() or "cliente"
+        apto_str = rec.get("apto", "")
+        if rec.get("apto_desc"):
+            apto_str += " — " + rec.get("apto_desc", "")
+        tipo_map = {"reserva": "Reserva", "parcial": "Pago parcial", "final": "Pago final"}
+        data = {
+            "numero":     rec.get("numero", rid),
+            "fecha_pago": rec.get("fecha_pago", ""),
+            "cliente":    nombre_full,
+            "propiedad":  apto_str,
+            "checkin":    rec.get("checkin", ""),
+            "checkout":   rec.get("checkout", ""),
+            "noches":     rec.get("noches", ""),
+            "concepto":   tipo_map.get(rec.get("tipo", "reserva"), "Pago"),
+            "moneda":     rec.get("moneda", "BRL"),
+            "forma_pago": rec.get("forma_pago", ""),
+            "monto":      rec.get("monto", ""),
         }
-        pdf_bytes = pdfkit.from_url(src_url, False, options=options)
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".pdf")
+        _os.close(tmp_fd)
+        draw_recibo(tmp_path, data)
+        with open(tmp_path, "rb") as fh:
+            pdf_bytes = fh.read()
+        _os.unlink(tmp_path)
         numero = rec.get("numero", rid)
-        nombre = (rec.get("nombre", "") + " " + rec.get("apellido", "")).strip() or rid
-        fname = "recibo_" + numero + "_" + nombre.replace(" ", "_") + ".pdf"
+        fname = "recibo_" + numero + "_" + nombre_full.replace(" ", "_") + ".pdf"
         return Response(
             pdf_bytes,
             content_type="application/pdf",
