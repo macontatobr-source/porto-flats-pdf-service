@@ -14,6 +14,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # App
 COPY . .
 
+# Directorio de datos persistentes (montar volumen aqui en Easypanel)
+RUN mkdir -p /app/data/uploads
+VOLUME ["/app/data"]
+
 EXPOSE 8080
 
 CMD ["python", "app.py"]
