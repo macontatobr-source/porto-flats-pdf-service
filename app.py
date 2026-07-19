@@ -90,7 +90,7 @@ def _tinyurl(url):
 
 
 # ── Proposal Store (45 días de retención) ────────────────────────────────────
-PROPOSALS_FILE = os.environ.get("PROPOSALS_FILE", "/app/proposals.json")
+PROPOSALS_FILE = os.environ.get("PROPOSALS_FILE", "/app/data/proposals.json")
 
 def _load_proposals():
     try:
@@ -137,7 +137,7 @@ def _store_proposal(nombre, wa_dest, email, ci, co, noites, prop_url, form_dict)
 
 
 # ── Settings Store ────────────────────────────────────────────────────────────
-SETTINGS_FILE = os.environ.get("SETTINGS_FILE", "/app/settings.json")
+SETTINGS_FILE = os.environ.get("SETTINGS_FILE", "/app/data/settings.json")
 
 DEFAULT_SETTINGS = {
     "n_fotos":             8,       # Fotos por opción (1-10)
@@ -147,6 +147,18 @@ DEFAULT_SETTINGS = {
     "forma_pago_defaults": ["fp_transf"],   # checkboxes pre-marcados
     "msg_intro":           "Te preparamos una propuesta de alojamiento en Porto de Galinhas.",
     "dias_historial":      45,
+    "dias_historial_recibos": 90,
+    "rec_empresa":      "M&A Empreendimentos Ltda.",
+    "rec_cnpj":         "51.057.038/0001-31",
+    "rec_footer":       "M&A Empreendimentos Ltda. / CNPJ: 51.057.038/0001-31",
+    "rec_msg_wa":       "Hola {nombre}, te enviamos tu recibo de pago de Porto Flats.",
+    "rec_moneda":       "BRL",
+    "rec_forma_pago":   "Transferencia",
+    "rec_pol":          "",
+    "rec_energia":      "",
+    "rec_condo":        "",
+    "rec_num_prefix":   "REC-",
+    "rec_num_next":     1,
     "cond_extra_default":  "",      # Nota libre en condiciones (por defecto)
 }
 
@@ -192,6 +204,8 @@ def api_save_settings():
         data["reserva_anticipo"] = max(0, min(100, int(data["reserva_anticipo"])))
     if "dias_historial" in data:
         data["dias_historial"] = max(7, min(90, int(data["dias_historial"])))
+    if "dias_historial_recibos" in data:
+        data["dias_historial_recibos"] = max(7, min(365, int(data["dias_historial_recibos"])))
     ok = _save_settings(data)
     return jsonify({"ok": ok, "settings": _load_settings()})
 
@@ -1417,7 +1431,7 @@ OPCIONES_SHEET  = os.environ.get("OPCIONES_SHEET",  "Opciones Pendientes")
 HISTORIAL_SHEET = os.environ.get("HISTORIAL_SHEET", "Nuevas propuestas historial")
 SERVICE_URL    = os.environ.get("SERVICE_URL", "https://pf-pdf-service.bg4ga1.easypanel.host")
 
-_UPL_DIR = _pathlib.Path(os.environ.get("UPLOADS_DIR", "/app/uploads"))
+_UPL_DIR = _pathlib.Path(os.environ.get("UPLOADS_DIR", "/app/data/uploads"))
 try:
     _UPL_DIR.mkdir(parents=True, exist_ok=True)
 except Exception:
@@ -3331,7 +3345,7 @@ input:focus,textarea:focus,select:focus{border-color:#87A286}
 # ── RECIBO DE PAGO ─────────────────────────────────────────────────────────────
 import secrets as _sec_mod
 
-_RECEIPTS_FILE = "/app/receipts.json"
+_RECEIPTS_FILE = os.environ.get("RECEIPTS_FILE", "/app/data/receipts.json")
 
 # Textos y defaults globales del módulo de recibos
 POL_DEFAULT = (
@@ -3343,16 +3357,35 @@ ENERGIA_DEFAULT = "Incluye uso racional de energia (10 Kw/dia). Excedente: R$ 2/
 CONDO_DEFAULT = "Condominio: R$ 250/mes. Se acordo abonar el 50%. No incluido en este recibo."
 FOOTER_DEFAULT = "M&A Empreendimentos Ltda. / CNPJ: 51.057.038/0001-31"
 
-def _load_receipts():
+def _purge_receipts(store, days=90):
+    """Elimina recibos mas viejos que `days` dias."""
+    from datetime import datetime, timedelta
+    cutoff = (datetime.utcnow() - timedelta(days=days)).isoformat()
+    return {k: v for k, v in store.items() if v.get("created", "") > cutoff}
+
+def _load_receipts(purge=False, days=90):
     try:
+        d = os.path.dirname(_RECEIPTS_FILE)
+        if d:
+            os.makedirs(d, exist_ok=True)
         with open(_RECEIPTS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            store = json.load(f)
+        if purge:
+            store = _purge_receipts(store, days)
+            _save_receipts(store)
+        return store
     except Exception:
         return {}
 
 def _save_receipts(data):
-    with open(_RECEIPTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    try:
+        d = os.path.dirname(_RECEIPTS_FILE)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(_RECEIPTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print("[receipts save error]", e)
 
 def _next_recibo_num():
     recs = _load_receipts()
@@ -3966,17 +3999,47 @@ def nuevo_recibo_form():
         "<div class='mfi'><label>Pr\xf3ximo n\xba</label><input type='number' id='s-next' value='1' min='1'></div>"
         "</div>"
         "</div>"
+        "<div class='mcard'>"
+        "<div class='msec'>&#x1F5C2; Retenci\xf3n de recibos</div>"
+        "<div class='mfi'><label>Guardar recibos por <span id='s-dias-rec-val'>90 d\xedas</span></label>"
+        "<input type='range' class='cfg-range' id='s-dias-rec' min='7' max='365' step='1' value='90'"
+        " oninput=\"document.getElementById('s-dias-rec-val').textContent=this.value+' d\xedas'\">"
+        "</div></div>"
         "<button class='msave-btn' onclick='saveReciboSettings()'>&#x2705; Guardar configuraci\xf3n</button>"
         "</div></div></div>"
 
         "<div class='toast' id='toast'></div>"
         "<script>" + _JS_RECIBO_FORM + _JS_RECIBO_HIST
-        + "function saveReciboSettings(){"
+        + "function loadReciboSettings(){"
+        "fetch('/api/settings').then(function(r){return r.json();}).then(function(d){"
+        "var s=d.settings||{};"
+        "var sv=function(id,v){var el=document.getElementById(id);if(el&&v!==undefined&&v!==null&&v!=='')el.value=v;};"
+        "sv('s-emp',s.rec_empresa);sv('s-cnpj',s.rec_cnpj);sv('s-foot',s.rec_footer);"
+        "sv('s-wmsg',s.rec_msg_wa);sv('s-mon',s.rec_moneda);sv('s-fp',s.rec_forma_pago);"
+        "sv('s-pol',s.rec_pol);sv('s-en',s.rec_energia);sv('s-cd',s.rec_condo);"
+        "sv('s-prefix',s.rec_num_prefix);sv('s-next',s.rec_num_next);"
+        "var dr=s.dias_historial_recibos||90;"
+        "sv('s-dias-rec',dr);document.getElementById('s-dias-rec-val').textContent=dr+' d\xedas';"
+        "});}"
+        "document.addEventListener('DOMContentLoaded',function(){loadReciboSettings();});"
+        "function saveReciboSettings(){"
+        "var g=function(id){var el=document.getElementById(id);return el?el.value:'';};"
+        "var payload={"
+        "rec_empresa:g('s-emp'),rec_cnpj:g('s-cnpj'),rec_footer:g('s-foot'),"
+        "rec_msg_wa:g('s-wmsg'),rec_moneda:g('s-mon'),rec_forma_pago:g('s-fp'),"
+        "rec_pol:g('s-pol'),rec_energia:g('s-en'),rec_condo:g('s-cd'),"
+        "rec_num_prefix:g('s-prefix'),rec_num_next:parseInt(g('s-next'))||1,"
+        "dias_historial_recibos:parseInt(g('s-dias-rec'))||90"
+        "};"
+        "fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})"
+        ".then(function(r){return r.json();})"
+        ".then(function(){"
         "document.getElementById('set-ov').classList.remove('open');"
         "var t=document.getElementById('toast');"
         "t.textContent='✅ Configuraci\xf3n guardada';"
         "t.style.display='block';"
-        "setTimeout(function(){t.style.display='none';},2500);}"
+        "setTimeout(function(){t.style.display='none';},2500);"
+        "});}"
         "</script>"
         "</body></html>"
     )
@@ -4049,7 +4112,8 @@ def nuevo_recibo_post():
     rec["checkout"] = _fmt_date(rec.get("checkout", ""))
     rec["fecha_pago"] = _fmt_date(rec.get("fecha_pago", ""))
 
-    recs = _load_receipts()
+    _dias_rec = _load_settings().get("dias_historial_recibos", 90)
+    recs = _load_receipts(purge=True, days=_dias_rec)
     recs[rid] = rec
     _save_receipts(recs)
 
@@ -4276,7 +4340,7 @@ def recibo_pdf(rid):
         return "Error generando PDF: " + str(e), 500
 
 
-# ─── API Historial ─────────────────────────────────────────────────────────────
+# ─── API Historial recibos ──────────────────────────────────────────────────────
 
 @app.route("/api/historial-recibos", methods=["GET"])
 def api_historial_recibos():
@@ -4285,45 +4349,41 @@ def api_historial_recibos():
     for rid, r in recs.items():
         nombre_full = (r.get("nombre", "") + " " + r.get("apellido", "")).strip()
         lst.append({
-            "id": rid,
-            "numero": r.get("numero", ""),
-            "tipo": r.get("tipo", "reserva"),
-            "nombre": nombre_full,
-            "apto": r.get("apto", ""),
-            "monto": r.get("monto", ""),
-            "moneda": r.get("moneda", "BRL"),
-            "fecha_pago": r.get("fecha_pago", ""),
+            "id":      rid,
+            "numero":  r.get("numero", ""),
+            "tipo":    r.get("tipo", "reserva"),
+            "nombre":  nombre_full,
+            "apto":    r.get("apto", ""),
+            "checkin": r.get("checkin", ""),
+            "monto":   r.get("monto", ""),
+            "moneda":  r.get("moneda", "BRL"),
+            "wa":      r.get("wa", ""),
             "created": r.get("created", ""),
-            "wa": r.get("wa", ""),
         })
     lst.sort(key=lambda x: x.get("created", ""), reverse=True)
-    return jsonify({"recibos": lst})
+    return jsonify({"ok": True, "recibos": lst})
 
-
-# ─── Eliminar recibo ───────────────────────────────────────────────────────────
 
 @app.route("/recibo/<rid>/delete", methods=["POST"])
-def delete_recibo(rid):
+def recibo_delete(rid):
     recs = _load_receipts()
     if rid in recs:
         del recs[rid]
         _save_receipts(recs)
-    base = os.environ.get("PROPUESTAS_DOMAIN", request.host_url.rstrip("/"))
-    return redirect(base + "/nuevo-recibo?saved=1")
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "no encontrado"}), 404
 
-
-# ─── Reenviar WhatsApp ────────────────────────────────────────────────────────
 
 @app.route("/recibo/<rid>/enviar-wa", methods=["POST"])
-def enviar_recibo_wa(rid):
+def recibo_enviar_wa(rid):
     recs = _load_receipts()
     rec = recs.get(rid)
     if not rec:
-        return jsonify({"ok": False, "error": "not found"}), 404
+        return jsonify({"ok": False, "error": "Recibo no encontrado"}), 404
     wa_raw = rec.get("wa", "").strip()
     wa_num = wa_raw.replace(" ", "").replace("-", "").replace("+", "")
     if not wa_num:
-        return jsonify({"ok": False, "error": "no wa number"}), 400
+        return jsonify({"ok": False, "error": "Sin numero WhatsApp"}), 400
     base = os.environ.get("PROPUESTAS_DOMAIN", request.host_url.rstrip("/"))
     nombre_cl = (rec.get("nombre", "") + " " + rec.get("apellido", "")).strip() or "cliente"
     sym = {"BRL": "R$", "USD": "U$S", "ARS": "$"}.get(rec.get("moneda", "BRL"), "R$")
@@ -4333,10 +4393,11 @@ def enviar_recibo_wa(rid):
         "Te enviamos tu recibo de pago " + rec.get("numero", "") + " de Porto Flats.\n\n"
         "\U0001f4b0 Monto abonado: " + sym + " " + rec.get("monto", "") + "\n"
         "\U0001f4cb Ver comprobante:\n" + link + "\n\n"
-        "¡Muchas gracias! 🏠"
+        "¡Muchas gracias! \U0001f3e0"
     )
-    ok = _evo_send_text(wa_num, msg)
-    return jsonify({"ok": ok})
+    _evo_send_text(wa_num, msg)
+    return jsonify({"ok": True})
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
