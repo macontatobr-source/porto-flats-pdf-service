@@ -3892,8 +3892,6 @@ def nuevo_recibo_form():
         "<div class='fi'><input id='f-footer' name='footer_texto' value='" + FOOTER_DEFAULT + "' placeholder='Empresa / CNPJ' oninput='updatePreview()'></div>"
         "</div>"
 
-        "</form>"
-
         # Vista previa
         "<div class='prev-wrap'>"
         "<div class='prev-lbl'>&#x1F441; Vista previa — como ve el cliente</div>"
@@ -3934,9 +3932,10 @@ def nuevo_recibo_form():
 
         # Barra de acciones
         "<div class='actbar'>"
-        "<button type='submit' form='f' name='accion' value='guardar' class='btn-save'>&#x1F4BE; Guardar</button>"
-        "<button type='submit' form='f' name='accion' value='enviar_wa' class='btn-wa'>&#x1F4F2; Generar + WhatsApp</button>"
+        "<button type='submit' name='accion' value='guardar' class='btn-save'>&#x1F4BE; Guardar</button>"
+        "<button type='submit' name='accion' value='enviar_wa' class='btn-wa'>&#x1F4F2; Generar + WhatsApp</button>"
         "</div>"
+        "</form>"
 
         + prefill_js_html
 
@@ -4283,8 +4282,6 @@ def ver_recibo(rid):
         "<div class='p-foot'>" + footer_texto + "</div>"
         "<div class='p-dlwrap'>"
         "<a href='" + pdf_url + "' class='p-dlbtn' download>&#x2B07;&#xFE0F; Descargar PDF</a>"
-        "<a href='/nuevo-recibo?edit=" + rid + "' class='p-dlbtn' style='background:#4A90D9;margin-top:8px'>&#x270F;&#xFE0F; Editar recibo</a>"
-        "<a href='/nuevo-recibo' class='p-dlbtn' style='background:#6c757d;margin-top:8px'>&#x2B05;&#xFE0F; Nuevo recibo</a>"
         "</div>"
         "</div>"
         "</body></html>"
